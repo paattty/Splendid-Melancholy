@@ -360,17 +360,6 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
         {/* Curated Waypoints quick jump buttons (01 - 05) */}
         <div className="pointer-events-auto ml-auto flex items-center bg-[#141418]/94 border border-stone-800/80 p-1 rounded-sm gap-0.5 shadow-xl">
           <button
-            onClick={onResetCamera}
-            className="px-2.5 py-1 text-xs font-mono tracking-wider text-stone-300 hover:text-white transition-all rounded-sm flex items-center gap-1.5 cursor-pointer hover:bg-stone-800/60 font-medium"
-            title="Home: Return to original overview position"
-          >
-            <Home className="w-3 h-3" />
-            <span className="text-[10px]">Home</span>
-          </button>
-
-          <span className="w-px h-3 bg-stone-800 mx-0.5" />
-
-          <button
             onClick={handleResumeFreeWalk}
             className={`px-2.5 py-1 text-xs font-mono tracking-wider transition-all rounded-sm flex items-center gap-1 cursor-pointer ${
               navigationMode === 'free'
