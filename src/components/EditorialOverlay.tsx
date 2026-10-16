@@ -73,8 +73,8 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
     <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between p-3.5 sm:p-5 md:p-6">
       {/* Top Bar: Brand & Unobtrusive Action Controls */}
       <header className="flex items-center justify-between w-full">
-        {/* Brand identity - Low-profile and refined with frosted glass backing for crisp legibility */}
-        <div className="pointer-events-auto flex items-baseline gap-2.5 bg-[#141418]/75 backdrop-blur-md border border-stone-800/60 px-3.5 py-1.5 rounded-sm shadow-sm">
+        {/* Brand identity - Low-profile and refined with crisp legibility */}
+        <div className="pointer-events-auto flex items-baseline gap-2.5 bg-[#141418]/94 border border-stone-800/80 px-3.5 py-1.5 rounded-sm shadow-sm">
           <h1 className="font-geographica text-2xl sm:text-3xl font-normal text-stone-100 drop-shadow-sm leading-none">
             Splendid Melancholy
           </h1>
@@ -84,7 +84,7 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
         </div>
 
         {/* Quiet top action controls - Low profile */}
-        <div className="pointer-events-auto flex items-center gap-1 bg-[#141418]/70 backdrop-blur-md border border-stone-800/60 p-1 rounded-sm">
+        <div className="pointer-events-auto flex items-center gap-1 bg-[#141418]/94 border border-stone-800/80 p-1 rounded-sm shadow-sm">
           {/* Home / Overview distance viewpoint button */}
           <button
             onClick={onResetCamera}
@@ -126,7 +126,7 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
 
       {/* Center Right: Selected Exhibit Details Card (when inspecting) - Shifted right & scaled compact */}
       {selectedExhibit && navigationMode === 'inspecting' && (
-        <aside className="pointer-events-auto absolute top-16 md:top-20 right-3 md:right-5 w-72 sm:w-80 max-w-[85vw] max-h-[calc(100vh-130px)] overflow-y-auto bg-[#131317]/85 backdrop-blur-xl border border-stone-800/80 p-5 rounded-sm shadow-2xl transition-all duration-300 animate-fade-in text-stone-300">
+        <aside className="pointer-events-auto absolute top-16 md:top-20 right-3 md:right-5 w-72 sm:w-80 max-w-[85vw] max-h-[calc(100vh-130px)] overflow-y-auto bg-[#131317]/96 border border-stone-800/80 p-5 rounded-sm shadow-2xl transition-all duration-300 animate-fade-in text-stone-300">
           <div className="flex items-center justify-between border-b border-stone-800/80 pb-2.5 mb-3.5">
             <span className="text-[10px] font-mono uppercase tracking-widest text-stone-400">
               Exhibit {selectedExhibit.number} · {selectedExhibit.category}
@@ -242,7 +242,7 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
 
       {/* Catalog / Index Drawer */}
       {showCatalogDrawer && (
-        <aside className="pointer-events-auto absolute top-20 right-6 md:right-8 w-80 bg-[#161619]/95 backdrop-blur-xl border border-stone-800 p-5 rounded-sm shadow-2xl z-30 transition-all animate-fade-in">
+        <aside className="pointer-events-auto absolute top-20 right-6 md:right-8 w-80 bg-[#161619]/98 border border-stone-800 p-5 rounded-sm shadow-2xl z-30 transition-all animate-fade-in">
           <div className="flex items-center justify-between border-b border-stone-800 pb-2 mb-4">
             <span className="text-xs font-mono uppercase tracking-widest text-stone-400">
               Exhibition Catalog
@@ -294,7 +294,7 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
 
       {/* Philosophy / Brand Modal */}
       {showInfoModal && (
-        <div className="pointer-events-auto fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="pointer-events-auto fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4">
           <div className="bg-[#17171a] border border-stone-800 max-w-lg w-full p-7 md:p-8 rounded-sm shadow-2xl relative text-stone-300 space-y-4">
             <button
               onClick={() => setShowInfoModal(false)}
@@ -332,7 +332,7 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
       {/* Bottom Navigation Dock - Compact & Non-obstructive */}
       <footer className="w-full flex items-end justify-between gap-4 pointer-events-none">
         {/* Minimal, elegant navigation instructions badge (bottom left) */}
-        <div className="pointer-events-auto flex items-center gap-2 sm:gap-3 bg-[#121216]/75 backdrop-blur-md border border-stone-800/70 px-3 py-1.5 rounded-sm shadow-lg text-[10px] text-stone-400 select-none font-['Helvetica_Neue',Helvetica,Arial,sans-serif]">
+        <div className="pointer-events-auto flex items-center gap-2 sm:gap-3 bg-[#121216]/94 border border-stone-800/80 px-3 py-1.5 rounded-sm shadow-lg text-[10px] text-stone-400 select-none font-['Helvetica_Neue',Helvetica,Arial,sans-serif]">
           <div className="flex items-center gap-1.5 text-stone-300">
             <span className="flex items-center gap-0.5">
               <kbd className="px-1 py-0.5 bg-stone-800/90 border border-stone-700/70 rounded-[2px] text-[9px] font-mono text-stone-200 leading-none">W</kbd>
@@ -358,7 +358,7 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
         </div>
 
         {/* Curated Waypoints quick jump buttons (01 - 05) */}
-        <div className="pointer-events-auto ml-auto flex items-center bg-[#141418]/75 backdrop-blur-md border border-stone-800/70 p-1 rounded-sm gap-0.5 shadow-xl">
+        <div className="pointer-events-auto ml-auto flex items-center bg-[#141418]/94 border border-stone-800/80 p-1 rounded-sm gap-0.5 shadow-xl">
           <button
             onClick={onResetCamera}
             className="px-2.5 py-1 text-xs font-mono tracking-wider text-stone-300 hover:text-white transition-all rounded-sm flex items-center gap-1.5 cursor-pointer hover:bg-stone-800/60 font-medium"
