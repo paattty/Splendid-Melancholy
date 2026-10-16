@@ -104,12 +104,94 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
     targetPitch: -0.16,
   });
 
+  // Smooth Pedestal Inspection Glide transition state (high frame-rate cubic ease-out)
+  const inspectTransition = useRef<{
+    active: boolean;
+    startTime: number;
+    duration: number;
+    startPos: THREE.Vector3;
+    targetPos: THREE.Vector3;
+    startTarget: THREE.Vector3;
+    targetTarget: THREE.Vector3;
+  }>({
+    active: false,
+    startTime: 0,
+    duration: 0.82,
+    startPos: new THREE.Vector3(),
+    targetPos: new THREE.Vector3(),
+    startTarget: new THREE.Vector3(),
+    targetTarget: new THREE.Vector3(),
+  });
+
+  // Trigger high frame-rate glide to pedestal
+  const triggerInspectTransition = useCallback((exhibit: ExhibitItem) => {
+    const container = containerRef.current;
+    resetTransition.current.active = false;
+    isElevatedHome.current = false;
+    cameraVelocity.current.set(0, 0, 0);
+
+    const pedX = exhibit.position[0];
+    const pedY = 1.22;
+    const pedZ = exhibit.position[2];
+
+    // Maintain continuous visual line from current camera position
+    const dx = cameraPos.current.x - pedX;
+    const dz = cameraPos.current.z - pedZ;
+    let approachAngle = Math.atan2(dx, dz);
+    if (Math.abs(dx) < 0.01 && Math.abs(dz) < 0.01) {
+      approachAngle = 0;
+    }
+
+    targetOrbitAngle.current = approachAngle;
+    inspectOrbitAngle.current = approachAngle;
+    targetOrbitPitch.current = 0.18;
+    inspectOrbitPitch.current = 0.18;
+
+    const orbitRadius = 1.65;
+    const eyeY = pedY + Math.sin(0.18) * orbitRadius;
+    const eyeHorizontalDist = Math.cos(0.18) * orbitRadius;
+    const eyeX = pedX + Math.sin(approachAngle) * eyeHorizontalDist;
+    const eyeZ = pedZ + Math.cos(approachAngle) * eyeHorizontalDist;
+
+    const camRightX = Math.cos(approachAngle);
+    const camRightZ = -Math.sin(approachAngle);
+    const lateralOffset = (container && container.clientWidth >= 768) ? 0.38 : 0;
+
+    inspectTransition.current.active = true;
+    inspectTransition.current.startTime = performance.now();
+    inspectTransition.current.duration = 0.82;
+    inspectTransition.current.startPos.copy(cameraPos.current);
+    inspectTransition.current.targetPos.set(
+      eyeX + camRightX * lateralOffset,
+      eyeY,
+      eyeZ + camRightZ * lateralOffset
+    );
+    inspectTransition.current.startTarget.copy(cameraTarget.current);
+    inspectTransition.current.targetTarget.set(
+      pedX + camRightX * lateralOffset,
+      pedY,
+      pedZ + camRightZ * lateralOffset
+    );
+  }, []);
+
+  const lastSelectedExhibitId = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedExhibit && selectedExhibit.id !== lastSelectedExhibitId.current) {
+      lastSelectedExhibitId.current = selectedExhibit.id;
+      triggerInspectTransition(selectedExhibit);
+    } else if (!selectedExhibit) {
+      lastSelectedExhibitId.current = null;
+      inspectTransition.current.active = false;
+    }
+  }, [selectedExhibit, triggerInspectTransition]);
+
   const lastResetTrigger = useRef(resetCameraTrigger);
   useEffect(() => {
     if (resetCameraTrigger > 0 && resetCameraTrigger !== lastResetTrigger.current) {
       lastResetTrigger.current = resetCameraTrigger;
       cameraVelocity.current.set(0, 0, 0);
       isElevatedHome.current = true;
+      inspectTransition.current.active = false;
 
       // Start smooth cinematic return to panoramic overview viewpoint
       resetTransition.current.active = true;
@@ -744,6 +826,18 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
     };
 
     const onPointerMove = (e: PointerEvent) => {
+      // If primary mouse button is released outside or not held, instantly release dragging
+      if (e.pointerType === 'mouse' && (e.buttons & 1) === 0) {
+        if (isDragging.current) {
+          isDragging.current = false;
+          if (canvas.hasPointerCapture(e.pointerId)) {
+            try {
+              canvas.releasePointerCapture(e.pointerId);
+            } catch (_) {}
+          }
+        }
+      }
+
       // Use cached rect for zero DOM layout thrashing during mouse drag
       mousePointer.current.x = ((e.clientX - cachedRect.left) / cachedRect.width) * 2 - 1;
       mousePointer.current.y = -((e.clientY - cachedRect.top) / cachedRect.height) * 2 + 1;
@@ -769,18 +863,31 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
     };
 
     const onPointerDown = (e: PointerEvent) => {
+      // Only react to primary (left) button click
+      if (e.button !== 0 && e.button !== undefined) return;
       isDragging.current = true;
       resetTransition.current.active = false;
+      inspectTransition.current.active = false;
       updateRect();
       dragStart.current = { x: e.clientX, y: e.clientY };
       dragDistance.current = 0;
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch (_) {}
     };
 
     const onPointerUp = (e: PointerEvent) => {
+      const dist = dragDistance.current;
       isDragging.current = false;
 
+      if (canvas.hasPointerCapture(e.pointerId)) {
+        try {
+          canvas.releasePointerCapture(e.pointerId);
+        } catch (_) {}
+      }
+
       // Only treat as a click if mouse didn't drag substantially
-      if (dragDistance.current < 6) {
+      if (dist < 6) {
         raycaster.setFromCamera(mousePointer.current, camera);
         const intersects = raycaster.intersectObjects(colliders, false);
 
@@ -791,11 +898,7 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
           if (found) {
             onSelectExhibitRef.current(found);
             onNavigationModeChangeRef.current('inspecting');
-            targetOrbitAngle.current = 0;
-            targetOrbitPitch.current = 0.18;
-            inspectOrbitAngle.current = 0;
-            inspectOrbitPitch.current = 0.18;
-            renderer.shadowMap.needsUpdate = true;
+            triggerInspectTransition(found);
           }
         } else {
           if (navModeRef.current === 'inspecting' || navModeRef.current === 'counter') {
@@ -804,6 +907,32 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
           }
         }
       }
+    };
+
+    const onPointerCancel = (e: PointerEvent) => {
+      isDragging.current = false;
+      if (canvas.hasPointerCapture(e.pointerId)) {
+        try {
+          canvas.releasePointerCapture(e.pointerId);
+        } catch (_) {}
+      }
+    };
+
+    const onPointerLeave = () => {
+      // When cursor leaves canvas and isn't actively dragging, clear hover and reset cursor
+      if (!isDragging.current) {
+        mousePointer.current.set(-10, -10);
+        if (lastHoveredExhibit !== null) {
+          lastHoveredExhibit = null;
+          onHoverExhibitRef.current(null);
+        }
+        canvas.style.cursor = 'default';
+      }
+    };
+
+    const onBlur = () => {
+      isDragging.current = false;
+      keysPressed.current = {};
     };
 
     const onResize = () => {
@@ -821,7 +950,12 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
     window.addEventListener('keyup', onKeyUp);
     canvas.addEventListener('pointermove', onPointerMove, { passive: true });
     canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('pointercancel', onPointerCancel);
+    canvas.addEventListener('pointerleave', onPointerLeave);
+    canvas.addEventListener('lostpointercapture', onPointerCancel);
     window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('blur', onBlur);
     window.addEventListener('resize', onResize);
 
     // 9. Animation Loop (Zero GC allocations, high-framerate exponential damping)
@@ -852,13 +986,15 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
       // Eliminates CPU overhead and garbage collection stutter during high-framerate movement
       if (time - lastRaycastTime > 24) {
         lastRaycastTime = time;
-        raycaster.setFromCamera(mousePointer.current, camera);
-        const hoveredIntersects = raycaster.intersectObjects(colliders, false);
         let detectedHovered: ExhibitItem | null = null;
-        if (hoveredIntersects.length > 0) {
-          const topHit = hoveredIntersects[0];
-          const hoveredId = topHit.object.userData?.exhibitId;
-          detectedHovered = EXHIBITS.find((ex) => ex.id === hoveredId) || null;
+        if (Math.abs(mousePointer.current.x) <= 1 && Math.abs(mousePointer.current.y) <= 1) {
+          raycaster.setFromCamera(mousePointer.current, camera);
+          const hoveredIntersects = raycaster.intersectObjects(colliders, false);
+          if (hoveredIntersects.length > 0) {
+            const topHit = hoveredIntersects[0];
+            const hoveredId = topHit.object.userData?.exhibitId;
+            detectedHovered = EXHIBITS.find((ex) => ex.id === hoveredId) || null;
+          }
         }
 
         if (detectedHovered?.id !== lastHoveredExhibit?.id) {
@@ -866,7 +1002,9 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
           onHoverExhibitRef.current(detectedHovered);
         }
 
-        canvas.style.cursor = detectedHovered ? 'pointer' : isDragging.current ? 'grabbing' : 'grab';
+        if (Math.abs(mousePointer.current.x) <= 1 && Math.abs(mousePointer.current.y) <= 1) {
+          canvas.style.cursor = detectedHovered ? 'pointer' : isDragging.current ? 'grabbing' : 'grab';
+        }
       }
 
       // Smooth Camera Navigation Updates
@@ -958,48 +1096,76 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
       } else if (navModeRef.current === 'inspecting') {
         const activeExhibit = selectedExhibitRef.current;
         if (activeExhibit) {
-          inspectOrbitAngle.current += (targetOrbitAngle.current - inspectOrbitAngle.current) * Math.min(delta * 10, 1);
-          inspectOrbitPitch.current += (targetOrbitPitch.current - inspectOrbitPitch.current) * Math.min(delta * 10, 1);
+          if (inspectTransition.current.active) {
+            const elapsed = (time - inspectTransition.current.startTime) / 1000;
+            const progress = Math.min(elapsed / inspectTransition.current.duration, 1);
+            // High frame-rate cubic ease-out for immediate responsive start and smooth arrival
+            const ease = 1 - Math.pow(1 - progress, 3);
 
-          const pedX = activeExhibit.position[0];
-          const pedY = 1.22;
-          const pedZ = activeExhibit.position[2];
+            cameraPos.current.lerpVectors(
+              inspectTransition.current.startPos,
+              inspectTransition.current.targetPos,
+              ease
+            );
+            cameraTarget.current.lerpVectors(
+              inspectTransition.current.startTarget,
+              inspectTransition.current.targetTarget,
+              ease
+            );
 
-          const orbitRadius = 1.65;
-          const eyeY = pedY + Math.sin(inspectOrbitPitch.current) * orbitRadius;
-          const eyeHorizontalDist = Math.cos(inspectOrbitPitch.current) * orbitRadius;
-          const eyeX = pedX + Math.sin(inspectOrbitAngle.current) * eyeHorizontalDist;
-          const eyeZ = pedZ + Math.cos(inspectOrbitAngle.current) * eyeHorizontalDist;
+            camera.position.copy(cameraPos.current);
+            camera.lookAt(cameraTarget.current);
 
-          // Calculate horizontal right vector perpendicular to orbit gaze
-          // Shift camera slightly right so eyewear renders centered in the open left area of the viewport
-          const camRightX = Math.cos(inspectOrbitAngle.current);
-          const camRightZ = -Math.sin(inspectOrbitAngle.current);
-          const lateralOffset = (container.clientWidth >= 768) ? 0.38 : 0;
+            targetYaw.current = Math.atan2(
+              cameraTarget.current.x - cameraPos.current.x,
+              cameraTarget.current.z - cameraPos.current.z
+            );
+            cameraYaw.current = targetYaw.current;
 
-          desiredPosVec.set(
-            eyeX + camRightX * lateralOffset,
-            eyeY,
-            eyeZ + camRightZ * lateralOffset
-          );
+            if (progress >= 1) {
+              inspectTransition.current.active = false;
+            }
+          } else {
+            // Interactive orbit with silky exponential damping in lockstep
+            const orbitDamp = 1 - Math.exp(-18 * delta);
+            inspectOrbitAngle.current += (targetOrbitAngle.current - inspectOrbitAngle.current) * orbitDamp;
+            inspectOrbitPitch.current += (targetOrbitPitch.current - inspectOrbitPitch.current) * orbitDamp;
 
-          desiredTargetVec.set(
-            pedX + camRightX * lateralOffset,
-            pedY,
-            pedZ + camRightZ * lateralOffset
-          );
+            const pedX = activeExhibit.position[0];
+            const pedY = 1.22;
+            const pedZ = activeExhibit.position[2];
 
-          cameraPos.current.lerp(desiredPosVec, Math.min(delta * 6.5, 1));
-          camera.position.copy(cameraPos.current);
+            const orbitRadius = 1.65;
+            const eyeY = pedY + Math.sin(inspectOrbitPitch.current) * orbitRadius;
+            const eyeHorizontalDist = Math.cos(inspectOrbitPitch.current) * orbitRadius;
+            const eyeX = pedX + Math.sin(inspectOrbitAngle.current) * eyeHorizontalDist;
+            const eyeZ = pedZ + Math.cos(inspectOrbitAngle.current) * eyeHorizontalDist;
 
-          cameraTarget.current.lerp(desiredTargetVec, Math.min(delta * 7.5, 1));
-          camera.lookAt(cameraTarget.current);
+            const camRightX = Math.cos(inspectOrbitAngle.current);
+            const camRightZ = -Math.sin(inspectOrbitAngle.current);
+            const lateralOffset = (container.clientWidth >= 768) ? 0.38 : 0;
 
-          targetYaw.current = Math.atan2(
-            cameraTarget.current.x - cameraPos.current.x,
-            cameraTarget.current.z - cameraPos.current.z
-          );
-          cameraYaw.current = targetYaw.current;
+            cameraPos.current.set(
+              eyeX + camRightX * lateralOffset,
+              eyeY,
+              eyeZ + camRightZ * lateralOffset
+            );
+
+            cameraTarget.current.set(
+              pedX + camRightX * lateralOffset,
+              pedY,
+              pedZ + camRightZ * lateralOffset
+            );
+
+            camera.position.copy(cameraPos.current);
+            camera.lookAt(cameraTarget.current);
+
+            targetYaw.current = Math.atan2(
+              cameraTarget.current.x - cameraPos.current.x,
+              cameraTarget.current.z - cameraPos.current.z
+            );
+            cameraYaw.current = targetYaw.current;
+          }
         }
       } else if (navModeRef.current === 'counter') {
         // Smoothly position camera in front of the counter desk:
@@ -1029,8 +1195,8 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
         const isHovered = node.exhibit.id === currentHoveredId;
         const isSelected = node.exhibit.id === currentSelectedId;
 
-        node.currentHoverProgress += ((isHovered ? 1 : 0) - node.currentHoverProgress) * Math.min(delta * 9, 1);
-        node.currentSelectProgress += ((isSelected ? 1 : 0) - node.currentSelectProgress) * Math.min(delta * 7, 1);
+        node.currentHoverProgress += ((isHovered ? 1 : 0) - node.currentHoverProgress) * (1 - Math.exp(-10 * delta));
+        node.currentSelectProgress += ((isSelected ? 1 : 0) - node.currentSelectProgress) * (1 - Math.exp(-8 * delta));
 
         const combinedHighlight = Math.max(node.currentHoverProgress, node.currentSelectProgress);
 
@@ -1061,10 +1227,10 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
 
         // Smooth dual spotlight blooms for key and rim lighting (calibrated, gentle illumination)
         const targetKeyIntensity = isSelected ? 1.6 : isHovered ? 1.3 : 1.0;
-        node.keySpotlight.intensity += (targetKeyIntensity - node.keySpotlight.intensity) * Math.min(delta * 8, 1);
+        node.keySpotlight.intensity += (targetKeyIntensity - node.keySpotlight.intensity) * (1 - Math.exp(-9 * delta));
 
         const targetRimIntensity = isSelected ? 1.05 : isHovered ? 0.8 : 0.55;
-        node.rimSpotlight.intensity += (targetRimIntensity - node.rimSpotlight.intensity) * Math.min(delta * 8, 1);
+        node.rimSpotlight.intensity += (targetRimIntensity - node.rimSpotlight.intensity) * (1 - Math.exp(-9 * delta));
       });
 
       // Render the scene
@@ -1080,7 +1246,12 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
       window.removeEventListener('keyup', onKeyUp);
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointercancel', onPointerCancel);
+      canvas.removeEventListener('pointerleave', onPointerLeave);
+      canvas.removeEventListener('lostpointercapture', onPointerCancel);
       window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('blur', onBlur);
       window.removeEventListener('resize', onResize);
 
       renderer.dispose();
@@ -1171,6 +1342,7 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchEnd}
     >
       <canvas ref={canvasRef} className="w-full h-full block" />
 
