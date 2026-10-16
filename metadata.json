@@ -1,0 +1,6 @@
+{
+  "name": "Splendid Melancholy — 3D Virtual Gallery",
+  "description": "An art-driven 3D virtual exhibition and Korean eyewear space with fluid navigation and restrained gallery atmosphere.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

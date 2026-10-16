@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+/* Geographica Script Regular font definitions with online webfont CDN and graceful calligraphic script fallbacks */
+@font-face {
+  font-family: "Geographica Script Regular";
+  src: url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.eot");
+  src: url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.eot?#iefix") format("embedded-opentype"),
+       url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.woff2") format("woff2"),
+       url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.woff") format("woff"),
+       url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.ttf") format("truetype"),
+       url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.svg#Geographica Script W01 Regular") format("svg");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geographica Script";
+  src: url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.woff2") format("woff2"),
+       url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.woff") format("woff"),
+       url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Dedicated brand script class */
+.font-geographica {
+  font-family: 'Geographica Script Regular', 'Geographica Script', 'Italianno', 'Meddon', 'Monsieur La Doulaise', 'Bickham Script Pro', 'Snell Roundhand', 'Brush Script MT', cursive;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  text-transform: none !important;
+}
+
+@layer base {
+  /* All general text across the app strictly uses Helvetica */
+  body, button, input, select, textarea, p, span, div, a, label, li {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  }
+
+  body {
+    background-color: #111113;
+    color: #e2dfd8;
+    user-select: none;
+    -webkit-user-select: none;
+    overflow: hidden;
+  }
+
+  /* Headings default to Helvetica with clean architectural weight */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  }
+
+  .font-sans, .font-serif {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  }
+
+  .font-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+}
+
+/* Canvas container styling */
+canvas {
+  display: block;
+  outline: none;
+}
