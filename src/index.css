@@ -1,32 +1,9 @@
 @import "tailwindcss";
+@import "./fonts.css";
 
-/* Geographica Script Regular font definitions with online webfont CDN and graceful calligraphic script fallbacks */
-@font-face {
-  font-family: "Geographica Script Regular";
-  src: url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.eot");
-  src: url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.eot?#iefix") format("embedded-opentype"),
-       url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.woff2") format("woff2"),
-       url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.woff") format("woff"),
-       url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.ttf") format("truetype"),
-       url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.svg#Geographica Script W01 Regular") format("svg");
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Geographica Script";
-  src: url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.woff2") format("woff2"),
-       url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.woff") format("woff"),
-       url("https://db.onlinewebfonts.com/t/3ad0fc99253e9a25029a8b33686e46fa.ttf") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* Dedicated brand script class */
+/* Dedicated brand script class — zero-latency Geographica Script with elegant serif fallbacks (no cursive/Comic Sans) */
 .font-geographica {
-  font-family: 'Geographica Script Regular', 'Geographica Script', 'Italianno', 'Meddon', 'Monsieur La Doulaise', 'Bickham Script Pro', 'Snell Roundhand', 'Brush Script MT', cursive;
+  font-family: 'Geographica Script', 'Geographica Script Regular', 'Italianno', 'Meddon', 'Monsieur La Doulaise', 'Bickham Script Pro', 'Snell Roundhand', 'Playfair Display', 'Bodoni MT', 'Didot', serif;
   font-style: normal;
   letter-spacing: 0.04em;
   text-transform: none !important;
