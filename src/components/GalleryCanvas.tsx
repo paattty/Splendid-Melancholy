@@ -13,6 +13,9 @@ interface GalleryCanvasProps {
   onHoverExhibit: (exhibit: ExhibitItem | null) => void;
   resetCameraTrigger?: number;
   onOpenCounter?: () => void;
+  currentStory?: 1 | 2;
+  onStoryChange?: (story: 1 | 2) => void;
+  teleportTargetStory?: { story: 1 | 2; id: number } | null;
 }
 
 interface PedestalNode {
@@ -38,6 +41,9 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
   onHoverExhibit,
   resetCameraTrigger = 0,
   onOpenCounter,
+  currentStory = 1,
+  onStoryChange,
+  teleportTargetStory,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -63,6 +69,10 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
 
   const onOpenCounterRef = useRef(onOpenCounter);
   onOpenCounterRef.current = onOpenCounter;
+
+  const currentStoryRef = useRef<1 | 2>(currentStory);
+  const onStoryChangeRef = useRef(onStoryChange);
+  onStoryChangeRef.current = onStoryChange;
 
   // Scene object refs
   const pedestalsRef = useRef<PedestalNode[]>([]);
@@ -211,8 +221,63 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
 
       targetYaw.current = resetTransition.current.targetYaw;
       targetPitch.current = -0.16;
+
+      currentStoryRef.current = 1;
+      onStoryChangeRef.current?.(1);
     }
   }, [resetCameraTrigger]);
+
+  // Smooth Teleport between Story 1 and Story 2 transition state (0.75s cubic ease-in-out)
+  const teleportTransition = useRef<{
+    active: boolean;
+    startTime: number;
+    duration: number;
+    startPos: THREE.Vector3;
+    targetPos: THREE.Vector3;
+    startTarget: THREE.Vector3;
+    targetTarget: THREE.Vector3;
+  }>({
+    active: false,
+    startTime: 0,
+    duration: 0.75,
+    startPos: new THREE.Vector3(),
+    targetPos: new THREE.Vector3(),
+    startTarget: new THREE.Vector3(),
+    targetTarget: new THREE.Vector3(),
+  });
+
+  const triggerTeleport = useCallback((targetStory: 1 | 2) => {
+    resetTransition.current.active = false;
+    inspectTransition.current.active = false;
+    isElevatedHome.current = false;
+    cameraVelocity.current.set(0, 0, 0);
+
+    const targetY = targetStory === 2 ? 6.0 + 1.62 : 1.62;
+    const targetZ = 10.5;
+    const lookTargetY = targetStory === 2 ? 6.0 + 1.45 : 1.3;
+
+    teleportTransition.current.active = true;
+    teleportTransition.current.startTime = performance.now();
+    teleportTransition.current.duration = 0.75;
+    teleportTransition.current.startPos.copy(cameraPos.current);
+    teleportTransition.current.targetPos.set(0, targetY, targetZ);
+    teleportTransition.current.startTarget.copy(cameraTarget.current);
+    teleportTransition.current.targetTarget.set(0, lookTargetY, 0);
+
+    targetYaw.current = Math.PI;
+    targetPitch.current = -0.06;
+
+    currentStoryRef.current = targetStory;
+    onStoryChangeRef.current?.(targetStory);
+  }, []);
+
+  const lastTeleportId = useRef<number | null>(null);
+  useEffect(() => {
+    if (teleportTargetStory && teleportTargetStory.id !== lastTeleportId.current) {
+      lastTeleportId.current = teleportTargetStory.id;
+      triggerTeleport(teleportTargetStory.story);
+    }
+  }, [teleportTargetStory, triggerTeleport]);
 
   // Orbit state when inspecting
   const inspectOrbitAngle = useRef<number>(0);
@@ -384,27 +449,350 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
       return wall;
     };
 
-    const wallHeight = 7.5;
-    createWall(0, wallHeight / 2, -18, 40, wallHeight, 1);
-    createWall(0, wallHeight / 2, 18, 40, wallHeight, 1);
-    createWall(-18, wallHeight / 2, 0, 1, wallHeight, 40);
-    createWall(18, wallHeight / 2, 0, 1, wallHeight, 40);
+    // Double-height architectural perimeter walls (matching chic dusty blush rose matte plaster)
+    const totalWallHeight = 12.2;
+    createWall(0, totalWallHeight / 2, -18, 40, totalWallHeight, 1);
+    createWall(0, totalWallHeight / 2, 18, 40, totalWallHeight, 1);
+    createWall(-18, totalWallHeight / 2, 0, 1, totalWallHeight, 40);
+    createWall(18, totalWallHeight / 2, 0, 1, totalWallHeight, 40);
 
-    // Entire ceiling is one huge luminous stretch light (monolithic glowing ceiling membrane)
-    const ceilingGeo = new THREE.PlaneGeometry(36, 36, 1, 1);
+    // STORY 2 FLOOR SLABS (Elevation Y = 6.0m, identical 36m x 36m footprint as Story 1)
+    // Slabs feature an architectural cutout well for the staircase at X: [-14.6, -11.4], Z: [-6.8, 6.2]
+    const createFloorSlab = (x: number, z: number, w: number, d: number) => {
+      const slabGeo = new THREE.BoxGeometry(w, 0.22, d);
+      const slabMesh = new THREE.Mesh(slabGeo, floorMat);
+      slabMesh.position.set(x, 5.89, z);
+      slabMesh.receiveShadow = true;
+      slabMesh.matrixAutoUpdate = false;
+      slabMesh.updateMatrix();
+      scene.add(slabMesh);
+      return slabMesh;
+    };
+
+    // 1. East main floor slab (29.4m wide x 36m deep)
+    createFloorSlab(3.3, 0, 29.4, 36);
+    // 2. West walkway perimeter slab (3.4m wide x 36m deep)
+    createFloorSlab(-16.3, 0, 3.4, 36);
+    // 3. North bridge connection beyond staircase (3.2m wide x 12.25m deep, meeting top step flush with zero gap)
+    createFloorSlab(-13.0, -11.875, 3.2, 12.25);
+    // 4. South bridge connection before staircase (3.2m wide x 11.8m deep)
+    createFloorSlab(-13.0, 12.1, 3.2, 11.8);
+
+    // Story 2 architectural slab grid joints (with lines cleanly removed only in the cut-out walkway region)
+    const createStory2Grid = () => {
+      const size = 44;
+      const divisions = 22;
+      const step = size / divisions;
+      const halfSize = size / 2;
+
+      const color1 = new THREE.Color(0xcab5b9);
+      const color2 = new THREE.Color(0xd4c2c7);
+
+      // Cut-out region bounds where the user walks through the stairwell opening:
+      // X corridor from -14.6 to -11.4
+      // Z opening from -6.05 (top step landing) to 6.2 (south floor edge)
+      const cutXMin = -14.6;
+      const cutXMax = -11.4;
+      const cutZMin = -6.05;
+      const cutZMax = 6.2;
+
+      const positions: number[] = [];
+      const colors: number[] = [];
+
+      const addSegment = (x1: number, z1: number, x2: number, z2: number, col: THREE.Color) => {
+        positions.push(x1, 0, z1, x2, 0, z2);
+        colors.push(col.r, col.g, col.b, col.r, col.g, col.b);
+      };
+
+      for (let i = 0, k = -halfSize; i <= divisions; i++, k += step) {
+        const col = k === 0 ? color1 : color2;
+
+        // Line parallel to X (constant Z = k, varying X from -halfSize to halfSize)
+        const z = k;
+        if (z >= cutZMin && z <= cutZMax) {
+          // Exclude cut-out walkway between cutXMin and cutXMax
+          if (cutXMin > -halfSize) {
+            addSegment(-halfSize, z, cutXMin, z, col);
+          }
+          if (cutXMax < halfSize) {
+            addSegment(cutXMax, z, halfSize, z, col);
+          }
+        } else {
+          // Outside cut-out in Z: full line
+          addSegment(-halfSize, z, halfSize, z, col);
+        }
+
+        // Line parallel to Z (constant X = k, varying Z from -halfSize to halfSize)
+        const x = k;
+        if (x >= cutXMin && x <= cutXMax) {
+          // Exclude cut-out walkway between cutZMin and cutZMax
+          if (cutZMin > -halfSize) {
+            addSegment(x, -halfSize, x, cutZMin, col);
+          }
+          if (cutZMax < halfSize) {
+            addSegment(x, cutZMax, x, halfSize, col);
+          }
+        } else {
+          // Outside cut-out in X: full line
+          addSegment(x, -halfSize, x, halfSize, col);
+        }
+      }
+
+      const gridGeo = new THREE.BufferGeometry();
+      gridGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      gridGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+      const gridMat = new THREE.LineBasicMaterial({
+        vertexColors: true,
+        toneMapped: false,
+      });
+
+      const gridMesh = new THREE.LineSegments(gridGeo, gridMat);
+      gridMesh.position.set(0, 6.002, 0);
+      gridMesh.matrixAutoUpdate = false;
+      gridMesh.updateMatrix();
+      return gridMesh;
+    };
+
+    const gridHelperStory2 = createStory2Grid();
+    scene.add(gridHelperStory2);
+
+    // Story 2 central circular polished stone inlay
+    const centerInlayStory2 = new THREE.Mesh(centerInlayGeo, centerInlayMat);
+    centerInlayStory2.rotation.x = -Math.PI / 2;
+    centerInlayStory2.position.set(0, 6.003, 0);
+    centerInlayStory2.receiveShadow = true;
+    centerInlayStory2.matrixAutoUpdate = false;
+    centerInlayStory2.updateMatrix();
+    scene.add(centerInlayStory2);
+
+    // Story 1 Ceiling Membrane (over main gallery wing)
+    const ceiling1Geo = new THREE.PlaneGeometry(29.4, 36, 1, 1);
     const ceilingMat = new THREE.MeshStandardMaterial({
       color: 0xfcf9f5,
-      emissive: new THREE.Color(0xfff6ed), // Soothing, diffused warm architectural luminous radiance
+      emissive: new THREE.Color(0xfff6ed),
       emissiveIntensity: 0.62,
       roughness: 0.22,
       metalness: 0.01,
     });
-    const ceiling = new THREE.Mesh(ceilingGeo, ceilingMat);
-    ceiling.position.set(0, ceilingHeight, 0);
-    ceiling.rotation.x = Math.PI / 2;
-    ceiling.matrixAutoUpdate = false;
-    ceiling.updateMatrix();
-    scene.add(ceiling);
+    const ceiling1 = new THREE.Mesh(ceiling1Geo, ceilingMat);
+    ceiling1.position.set(3.3, 5.76, 0);
+    ceiling1.rotation.x = Math.PI / 2;
+    ceiling1.matrixAutoUpdate = false;
+    ceiling1.updateMatrix();
+    scene.add(ceiling1);
+
+    // Story 2 Full Luminous Ceiling Membrane (36m x 36m at Y = 12.0m)
+    const ceiling2Geo = new THREE.PlaneGeometry(36, 36, 1, 1);
+    const ceiling2 = new THREE.Mesh(ceiling2Geo, ceilingMat);
+    ceiling2.position.set(0, 12.0, 0);
+    ceiling2.rotation.x = Math.PI / 2;
+    ceiling2.matrixAutoUpdate = false;
+    ceiling2.updateMatrix();
+    scene.add(ceiling2);
+
+    // GRAND ARCHITECTURAL FLOATING STAIRCASE
+    // Rises from Z = 6.0 (Y = 0) up to Z = -6.0 (Y = 6.0) at X = -13.0 (Width = 2.6m)
+    const staircaseGroup = new THREE.Group();
+    const stepTreadGeo = new THREE.BoxGeometry(2.6, 0.08, 0.52);
+    const stepTreadMat = new THREE.MeshStandardMaterial({
+      color: 0xedf1f7,
+      roughness: 0.22,
+      metalness: 0.92,
+    });
+    const stepGlowGeo = new THREE.BoxGeometry(2.58, 0.015, 0.04);
+    const stepGlowMat = new THREE.MeshBasicMaterial({ color: 0xffedd5 });
+
+    const totalSteps = 24;
+    const stepDepth = 12.0 / totalSteps;
+    const stepRise = 6.0 / totalSteps;
+
+    for (let i = 0; i < totalSteps; i++) {
+      const stepY = (i + 1) * stepRise - 0.04;
+      const stepZ = 6.0 - (i + 0.5) * stepDepth;
+
+      const step = new THREE.Mesh(stepTreadGeo, stepTreadMat);
+      step.position.set(-13.0, stepY, stepZ);
+      step.receiveShadow = true;
+      step.castShadow = true;
+      step.matrixAutoUpdate = false;
+      step.updateMatrix();
+      staircaseGroup.add(step);
+
+      // Warm architectural under-tread LED glow
+      const stepGlow = new THREE.Mesh(stepGlowGeo, stepGlowMat);
+      stepGlow.position.set(-13.0, stepY - 0.045, stepZ + 0.22);
+      stepGlow.matrixAutoUpdate = false;
+      stepGlow.updateMatrix();
+      staircaseGroup.add(stepGlow);
+    }
+
+    // Architectural base riser under bottom step down to 1F floor (zero gap at base)
+    const baseRiserGeo = new THREE.BoxGeometry(2.6, 0.17, 0.52);
+    const baseRiser = new THREE.Mesh(baseRiserGeo, stepTreadMat);
+    baseRiser.position.set(-13.0, 0.17 / 2, 5.75);
+    baseRiser.receiveShadow = true;
+    baseRiser.castShadow = true;
+    baseRiser.matrixAutoUpdate = false;
+    baseRiser.updateMatrix();
+    staircaseGroup.add(baseRiser);
+
+    // Glass Balustrades & Brushed Metal Railings
+    const glassRailMat = new THREE.MeshPhysicalMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.38,
+      roughness: 0.05,
+      metalness: 0.08,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.05,
+    });
+    const railMetalMat = new THREE.MeshStandardMaterial({
+      color: 0xd8dde5,
+      roughness: 0.2,
+      metalness: 0.94,
+    });
+
+    // Guardrail panels surrounding the Story 2 stairwell void (mezzanine safety)
+    // East edge of void (at X = -11.4, length 11.95m from Z = -5.75 to 6.2)
+    const voidRailGeoEast = new THREE.BoxGeometry(0.04, 1.05, 11.95);
+    const voidRailEast = new THREE.Mesh(voidRailGeoEast, glassRailMat);
+    voidRailEast.position.set(-11.4, 6.0 + 1.05 / 2, 0.225);
+    voidRailEast.matrixAutoUpdate = false;
+    voidRailEast.updateMatrix();
+    staircaseGroup.add(voidRailEast);
+
+    const voidCapGeoEast = new THREE.BoxGeometry(0.08, 0.04, 11.95);
+    const voidCapEast = new THREE.Mesh(voidCapGeoEast, railMetalMat);
+    voidCapEast.position.set(-11.4, 6.0 + 1.05, 0.225);
+    voidCapEast.matrixAutoUpdate = false;
+    voidCapEast.updateMatrix();
+    staircaseGroup.add(voidCapEast);
+
+    // South edge of void (at Z = 6.2, width 3.2m)
+    const voidRailGeoSouth = new THREE.BoxGeometry(3.2, 1.05, 0.04);
+    const voidRailSouth = new THREE.Mesh(voidRailGeoSouth, glassRailMat);
+    voidRailSouth.position.set(-13.0, 6.0 + 1.05 / 2, 6.2);
+    voidRailSouth.matrixAutoUpdate = false;
+    voidRailSouth.updateMatrix();
+    staircaseGroup.add(voidRailSouth);
+
+    const voidCapGeoSouth = new THREE.BoxGeometry(3.2, 0.04, 0.08);
+    const voidCapSouth = new THREE.Mesh(voidCapGeoSouth, railMetalMat);
+    voidCapSouth.position.set(-13.0, 6.0 + 1.05, 6.2);
+    voidCapSouth.matrixAutoUpdate = false;
+    voidCapSouth.updateMatrix();
+    staircaseGroup.add(voidCapSouth);
+
+    // West edge of void (at X = -14.6, length 11.95m from Z = -5.75 to 6.2)
+    const voidRailGeoWest = new THREE.BoxGeometry(0.04, 1.05, 11.95);
+    const voidRailWest = new THREE.Mesh(voidRailGeoWest, glassRailMat);
+    voidRailWest.position.set(-14.6, 6.0 + 1.05 / 2, 0.225);
+    voidRailWest.matrixAutoUpdate = false;
+    voidRailWest.updateMatrix();
+    staircaseGroup.add(voidRailWest);
+
+    const voidCapGeoWest = new THREE.BoxGeometry(0.08, 0.04, 11.95);
+    const voidCapWest = new THREE.Mesh(voidCapGeoWest, railMetalMat);
+    voidCapWest.position.set(-14.6, 6.0 + 1.05, 0.225);
+    voidCapWest.matrixAutoUpdate = false;
+    voidCapWest.updateMatrix();
+    staircaseGroup.add(voidCapWest);
+
+    // Architectural floor kick-curb skirting along the void perimeter (safety barrier against slips)
+    const curbMat = new THREE.MeshStandardMaterial({
+      color: 0x222226,
+      roughness: 0.6,
+      metalness: 0.35,
+    });
+    const curbGeoSides = new THREE.BoxGeometry(0.06, 0.04, 11.95);
+    const eastCurb = new THREE.Mesh(curbGeoSides, curbMat);
+    eastCurb.position.set(-11.4, 6.0 + 0.02, 0.225);
+    eastCurb.matrixAutoUpdate = false;
+    eastCurb.updateMatrix();
+    staircaseGroup.add(eastCurb);
+
+    const westCurb = new THREE.Mesh(curbGeoSides, curbMat);
+    westCurb.position.set(-14.6, 6.0 + 0.02, 0.225);
+    westCurb.matrixAutoUpdate = false;
+    westCurb.updateMatrix();
+    staircaseGroup.add(westCurb);
+
+    const curbGeoSouth = new THREE.BoxGeometry(3.2, 0.04, 0.06);
+    const southCurb = new THREE.Mesh(curbGeoSouth, curbMat);
+    southCurb.position.set(-13.0, 6.0 + 0.02, 6.2);
+    southCurb.matrixAutoUpdate = false;
+    southCurb.updateMatrix();
+    staircaseGroup.add(southCurb);
+
+    // Structural balustrade corner stanchions for realistic architectural stability
+    const postGeo = new THREE.BoxGeometry(0.06, 1.07, 0.06);
+    const cornerPositions = [
+      [-14.6, 6.2],
+      [-11.4, 6.2],
+      [-14.6, -5.75],
+      [-11.4, -5.75],
+    ];
+    cornerPositions.forEach(([px, pz]) => {
+      const post = new THREE.Mesh(postGeo, railMetalMat);
+      post.position.set(px, 6.0 + 1.07 / 2, pz);
+      post.matrixAutoUpdate = false;
+      post.updateMatrix();
+      staircaseGroup.add(post);
+    });
+
+    // Ascending glass balustrades & brushed handrails along both borders of the staircase
+    const stairRun = 11.5;
+    const stairRise = 5.76;
+    const stairAngle = Math.atan2(stairRise, stairRun);
+    const stairRailLength = Math.hypot(stairRun, stairRise);
+
+    const stairGlassGeo = new THREE.BoxGeometry(0.025, 0.95, stairRailLength);
+    const stairHandrailGeo = new THREE.BoxGeometry(0.06, 0.04, stairRailLength);
+
+    [-14.32, -11.68].forEach((rx) => {
+      // Incline safety glass panel
+      const stairGlass = new THREE.Mesh(stairGlassGeo, glassRailMat);
+      stairGlass.position.set(rx, 3.555, 0.0);
+      stairGlass.rotation.x = stairAngle;
+      stairGlass.matrixAutoUpdate = false;
+      stairGlass.updateMatrix();
+      staircaseGroup.add(stairGlass);
+
+      // Incline brushed metal safety handrail
+      const stairHandrail = new THREE.Mesh(stairHandrailGeo, railMetalMat);
+      stairHandrail.position.set(rx, 4.05, 0.0);
+      stairHandrail.rotation.x = stairAngle;
+      stairHandrail.matrixAutoUpdate = false;
+      stairHandrail.updateMatrix();
+      staircaseGroup.add(stairHandrail);
+    });
+
+    scene.add(staircaseGroup);
+
+
+
+    // Story 2 Dedicated Lighting
+    const keyLight2 = new THREE.DirectionalLight(0xfff9ef, 0.78);
+    keyLight2.position.set(4, 13.5, 4);
+    keyLight2.castShadow = false;
+    scene.add(keyLight2);
+
+    const story2WallNorth = new THREE.PointLight(0xfff0ee, 0.45, 30, 1.3);
+    story2WallNorth.position.set(0, 11.2, -15);
+    scene.add(story2WallNorth);
+
+    const story2WallSouth = new THREE.PointLight(0xfff0ee, 0.45, 30, 1.3);
+    story2WallSouth.position.set(0, 11.2, 15);
+    scene.add(story2WallSouth);
+
+    const story2WallEast = new THREE.PointLight(0xfff2f0, 0.45, 30, 1.3);
+    story2WallEast.position.set(15, 11.2, 0);
+    scene.add(story2WallEast);
+
+    const story2WallWest = new THREE.PointLight(0xfff2f0, 0.45, 30, 1.3);
+    story2WallWest.position.set(-15, 11.2, 0);
+    scene.add(story2WallWest);
 
     // 6. Curated Eyewear Pedestals (Architectural Monoliths)
     const pedestalNodes: PedestalNode[] = [];
@@ -1008,7 +1396,43 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
       }
 
       // Smooth Camera Navigation Updates
-      if (resetTransition.current.active) {
+      if (teleportTransition.current.active) {
+        const elapsed = (time - teleportTransition.current.startTime) / 1000;
+        const progress = Math.min(elapsed / teleportTransition.current.duration, 1);
+        const ease = progress < 0.5
+          ? 4 * progress * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+        cameraPos.current.lerpVectors(
+          teleportTransition.current.startPos,
+          teleportTransition.current.targetPos,
+          ease
+        );
+        cameraTarget.current.lerpVectors(
+          teleportTransition.current.startTarget,
+          teleportTransition.current.targetTarget,
+          ease
+        );
+
+        camera.position.copy(cameraPos.current);
+        camera.lookAt(cameraTarget.current);
+
+        targetYaw.current = Math.atan2(
+          cameraTarget.current.x - cameraPos.current.x,
+          cameraTarget.current.z - cameraPos.current.z
+        );
+        cameraYaw.current = targetYaw.current;
+
+        if (progress >= 1) {
+          teleportTransition.current.active = false;
+          cameraVelocity.current.set(0, 0, 0);
+          const detectedStory = cameraPos.current.y >= 3.8 ? 2 : 1;
+          if (currentStoryRef.current !== detectedStory) {
+            currentStoryRef.current = detectedStory;
+            onStoryChangeRef.current?.(detectedStory);
+          }
+        }
+      } else if (resetTransition.current.active) {
         const elapsed = (time - resetTransition.current.startTime) / 1000;
         const progress = Math.min(elapsed / resetTransition.current.duration, 1);
         const ease = progress < 0.5
@@ -1070,9 +1494,82 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
         cameraPos.current.x = Math.max(-15.5, Math.min(15.5, cameraPos.current.x));
         cameraPos.current.z = Math.max(-15.5, Math.min(15.5, cameraPos.current.z));
 
-        // Smooth eye-level transition
-        const targetEyeY = isElevatedHome.current ? 2.8 : 1.62;
-        cameraPos.current.y += (targetEyeY - cameraPos.current.y) * (1 - Math.exp(-4.5 * delta));
+        // Calculate ground elevation smoothly without any glitching
+        // Staircase corridor: X centered at -13.0, runs between Z = 6.0 (bottom, 1F) and Z = -6.0 (top, 2F)
+        const onStairs = cameraPos.current.x >= -14.4 &&
+                         cameraPos.current.x <= -11.6 &&
+                         cameraPos.current.z >= -6.2 &&
+                         cameraPos.current.z <= 6.2;
+
+        let groundY = 0;
+        if (onStairs) {
+          // Continuous, seamless slope up the stairs from 0.0 to 6.0
+          const stairProgress = THREE.MathUtils.clamp((6.0 - cameraPos.current.z) / 12.0, 0, 1);
+          groundY = stairProgress * 6.0;
+
+          // Keep player safely within stair walkway width
+          cameraPos.current.x = THREE.MathUtils.clamp(cameraPos.current.x, -14.1, -11.9);
+        } else if (cameraPos.current.y >= 3.6) {
+          // On Story 2 floor (Elevation 6.0m)
+          groundY = 6.0;
+
+          // Mezzanine perimeter safety borders: Prevent stepping through glass balustrades into the stairwell opening
+          // East guardrail border (at X = -11.4): Keep visitor safely on the east floor
+          if (cameraPos.current.z > -5.75 && cameraPos.current.z < 6.35) {
+            if (cameraPos.current.x < -11.15 && cameraPos.current.x >= -13.0) {
+              cameraPos.current.x = -11.15;
+            }
+          }
+
+          // West guardrail border (at X = -14.6): Keep visitor safely on the west walkway
+          if (cameraPos.current.z > -5.75 && cameraPos.current.z < 6.35) {
+            if (cameraPos.current.x > -14.85 && cameraPos.current.x <= -13.0) {
+              cameraPos.current.x = -14.85;
+            }
+          }
+
+          // South guardrail border (at Z = 6.2): Keep visitor safely on the south bridge
+          if (cameraPos.current.x > -14.85 && cameraPos.current.x < -11.15) {
+            if (cameraPos.current.z < 6.45 && cameraPos.current.z >= 5.0) {
+              cameraPos.current.z = 6.45;
+            }
+          }
+
+          // North stair entrance safety: guide into stair walkway channel
+          if (cameraPos.current.z > -5.85 && (cameraPos.current.x < -14.2 || cameraPos.current.x > -11.8)) {
+            if (cameraPos.current.x <= -14.2 && cameraPos.current.x > -15.5) {
+              cameraPos.current.x = -14.85;
+            } else if (cameraPos.current.x >= -11.8 && cameraPos.current.x < -10.5) {
+              cameraPos.current.x = -11.15;
+            }
+          }
+        } else {
+          // On Story 1 floor (Ground level 0.0m)
+          groundY = 0.0;
+
+          // Ground floor stair clearance safety: Prevent walking into low staircase underside from the sides
+          if (cameraPos.current.z >= 2.0 && cameraPos.current.z <= 6.2 && !onStairs) {
+            if (cameraPos.current.x > -14.5 && cameraPos.current.x < -13.0) {
+              cameraPos.current.x = -14.6;
+            } else if (cameraPos.current.x >= -13.0 && cameraPos.current.x < -11.5) {
+              cameraPos.current.x = -11.4;
+            }
+          }
+        }
+
+        const targetEyeY = (isElevatedHome.current && groundY === 0)
+          ? 2.8
+          : groundY + 1.62;
+
+        // Ultra-smooth, responsive vertical follow with zero lag or pop
+        cameraPos.current.y += (targetEyeY - cameraPos.current.y) * (1 - Math.exp(-14.0 * delta));
+
+        // Update current story state if user walked up or down the stairs on foot
+        const activeStory = groundY >= 3.0 ? 2 : 1;
+        if (activeStory !== currentStoryRef.current) {
+          currentStoryRef.current = activeStory;
+          onStoryChangeRef.current?.(activeStory);
+        }
 
         const bob = isMoving ? Math.sin(walkDistanceRef.current) * 0.012 : 0;
         camera.position.set(cameraPos.current.x, cameraPos.current.y + bob, cameraPos.current.z);
@@ -1261,7 +1758,8 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
       riserGeo.dispose();
       floorGeo.dispose();
       centerInlayGeo.dispose();
-      ceilingGeo.dispose();
+      ceiling1Geo.dispose();
+      ceiling2Geo.dispose();
       ceilingMat.dispose();
       if (envTexture) envTexture.dispose();
     };
@@ -1345,24 +1843,6 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
       onTouchCancel={onTouchEnd}
     >
       <canvas ref={canvasRef} className="w-full h-full block" />
-
-      {/* Floating Hover Indicator - Anchored at bottom center to prevent obstructing the view */}
-      {hoveredExhibit && navigationMode === 'free' && (
-        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 pointer-events-none transition-all duration-300 opacity-95 animate-fade-in z-20">
-          <div className="bg-[#141418]/94 border border-stone-800/80 px-3 py-1 rounded-full shadow-xl flex items-center gap-2">
-            <span className="text-[10px] tracking-wider font-mono text-stone-400">
-              {hoveredExhibit.number}
-            </span>
-            <span className="w-1 h-1 rounded-full bg-stone-600" />
-            <span className="font-serif text-xs tracking-wide text-stone-200">
-              {hoveredExhibit.title}
-            </span>
-            <span className="text-[9px] tracking-wider uppercase text-stone-400 hidden sm:inline">
-              · Inspect
-            </span>
-          </div>
-        </div>
-      )}
 
       {/* On-screen Directional Touch Controls - Low-profile and non-obstructive */}
       <div className="absolute bottom-4 left-4 z-20 flex flex-col items-center gap-1 md:hidden pointer-events-auto">

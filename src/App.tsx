@@ -14,6 +14,15 @@ export default function App() {
   const [resetCameraTrigger, setResetCameraTrigger] = useState<number>(0);
   const [isCounterOpen, setIsCounterOpen] = useState<boolean>(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [currentStory, setCurrentStory] = useState<1 | 2>(1);
+  const [teleportTargetStory, setTeleportTargetStory] = useState<{ story: 1 | 2; id: number } | null>(null);
+
+  const handleTeleportToStory = React.useCallback((story: 1 | 2) => {
+    setSelectedExhibit(null);
+    setIsCounterOpen(false);
+    setNavigationMode('free');
+    setTeleportTargetStory({ story, id: Date.now() });
+  }, []);
 
   const handleSelectExhibit = React.useCallback((exhibit: ExhibitItem | null) => {
     setSelectedExhibit(exhibit);
@@ -121,6 +130,9 @@ export default function App() {
         onHoverExhibit={setHoveredExhibit}
         resetCameraTrigger={resetCameraTrigger}
         onOpenCounter={handleOpenCounter}
+        currentStory={currentStory}
+        onStoryChange={setCurrentStory}
+        teleportTargetStory={teleportTargetStory}
       />
 
       {/* Editorial DOM Overlay & Controls */}
@@ -133,6 +145,8 @@ export default function App() {
         onOpenCounter={handleOpenCounter}
         onAcquireAtCounter={handleAcquireExhibit}
         cartCount={totalCartCount}
+        currentStory={currentStory}
+        onTeleportToStory={handleTeleportToStory}
       />
 
       {/* Acquisitions & Checkout Counter Modal */}

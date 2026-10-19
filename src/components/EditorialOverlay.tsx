@@ -1,15 +1,12 @@
-import React, { useState } from 'react';
-import { EXHIBITS } from '../data/exhibits';
+import React, { useState, useEffect } from 'react';
 import { ExhibitItem, NavigationMode } from '../types/gallery';
 import {
-  Compass,
-  Eye,
-  ArrowRight,
-  ArrowLeft,
   X,
   Info,
   Home,
-  ShoppingBag,
+  Layers,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 
 interface EditorialOverlayProps {
@@ -21,6 +18,8 @@ interface EditorialOverlayProps {
   onOpenCounter: () => void;
   onAcquireAtCounter: (exhibit: ExhibitItem) => void;
   cartCount: number;
+  currentStory?: 1 | 2;
+  onTeleportToStory?: (story: 1 | 2) => void;
 }
 
 export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
@@ -32,84 +31,123 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
   onOpenCounter,
   onAcquireAtCounter,
   cartCount,
+  currentStory = 1,
+  onTeleportToStory,
 }) => {
-  const [showCatalogDrawer, setShowCatalogDrawer] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showLevelsMenu, setShowLevelsMenu] = useState(false);
+  const [showTurnHint, setShowTurnHint] = useState(true);
+  const levelsMenuRef = React.useRef<HTMLDivElement>(null);
 
-  const handleSelectExhibitByIndex = (index: number) => {
-    const exhibit = EXHIBITS[index];
-    if (exhibit) {
-      onSelectExhibit(exhibit);
-      onNavigationModeChange('inspecting');
+  // Dismiss turn guidance on first mouse interaction or after 7s
+  useEffect(() => {
+    const handleFirstDrag = () => {
+      setShowTurnHint(false);
+    };
+    window.addEventListener('pointerdown', handleFirstDrag, { once: true });
+    const timer = setTimeout(() => setShowTurnHint(false), 7000);
+    return () => {
+      window.removeEventListener('pointerdown', handleFirstDrag);
+      clearTimeout(timer);
+    };
+  }, []);
+
+  // Close levels dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        levelsMenuRef.current &&
+        !levelsMenuRef.current.contains(e.target as Node)
+      ) {
+        setShowLevelsMenu(false);
+      }
+    };
+    if (showLevelsMenu) {
+      document.addEventListener('pointerdown', handleClickOutside);
     }
-  };
-
-  const handleNextExhibit = () => {
-    if (!selectedExhibit) {
-      handleSelectExhibitByIndex(0);
-      return;
-    }
-    const currentIndex = EXHIBITS.findIndex((e) => e.id === selectedExhibit.id);
-    const nextIndex = (currentIndex + 1) % EXHIBITS.length;
-    handleSelectExhibitByIndex(nextIndex);
-  };
-
-  const handlePrevExhibit = () => {
-    if (!selectedExhibit) {
-      handleSelectExhibitByIndex(EXHIBITS.length - 1);
-      return;
-    }
-    const currentIndex = EXHIBITS.findIndex((e) => e.id === selectedExhibit.id);
-    const prevIndex = (currentIndex - 1 + EXHIBITS.length) % EXHIBITS.length;
-    handleSelectExhibitByIndex(prevIndex);
-  };
-
-  const handleResumeFreeWalk = () => {
-    onNavigationModeChange('free');
-    onSelectExhibit(null);
-  };
+    return () => {
+      document.removeEventListener('pointerdown', handleClickOutside);
+    };
+  }, [showLevelsMenu]);
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between p-3.5 sm:p-5 md:p-6">
       {/* Top Bar: Brand & Unobtrusive Action Controls */}
       <header className="flex items-center justify-between w-full">
-        {/* Brand identity - Low-profile and refined with crisp legibility */}
-        <div className="pointer-events-auto flex items-baseline gap-2.5 bg-[#141418]/94 border border-stone-800/80 px-3.5 py-1.5 rounded-sm shadow-sm">
-          <h1 className="font-geographica text-2xl sm:text-3xl font-normal text-stone-100 drop-shadow-sm leading-none">
+        {/* Brand identity - Minimal, low-profile and scaled small for zero visual obstruction */}
+        <div className="pointer-events-auto flex items-baseline gap-1.5 bg-[#141418]/94 border border-stone-800/80 px-2.5 py-1 rounded-sm shadow-sm">
+          <h1 className="font-geographica text-base sm:text-lg font-normal text-stone-100 drop-shadow-xs leading-none">
             Splendid Melancholy
           </h1>
-          <span className="text-[10px] tracking-widest uppercase text-stone-400 hidden sm:inline font-['Helvetica_Neue',Helvetica,Arial,sans-serif]">
+          <span className="text-[8px] tracking-[0.16em] uppercase text-stone-400 font-['Helvetica_Neue',Helvetica,Arial,sans-serif]">
             Korea
           </span>
         </div>
 
         {/* Quiet top action controls - Low profile */}
         <div className="pointer-events-auto flex items-center gap-1 bg-[#141418]/94 border border-stone-800/80 p-1 rounded-sm shadow-sm">
-          {/* Home / Overview distance viewpoint button */}
-          <button
-            onClick={onResetCamera}
-            className="flex items-center gap-1.5 text-xs text-stone-300 hover:text-white py-1 px-2.5 transition-colors cursor-pointer rounded-sm hover:bg-stone-800/60 font-medium"
-            title="Home: Return to original overview position"
-          >
-            <Home className="w-3.5 h-3.5" />
-            <span className="text-[10px] font-mono uppercase tracking-wider">
-              Home
-            </span>
-          </button>
+          {/* Architectural Levels Dropdown Menu */}
+          <div ref={levelsMenuRef} className="relative">
+            <button
+              onClick={() => setShowLevelsMenu(!showLevelsMenu)}
+              className={`flex items-center gap-1.5 text-xs py-1 px-2.5 transition-colors cursor-pointer rounded-sm ${
+                showLevelsMenu
+                  ? 'bg-stone-800 text-stone-100'
+                  : 'text-stone-300 hover:text-white hover:bg-stone-800/60 font-medium'
+              }`}
+              title="Levels: Select gallery floor"
+              aria-expanded={showLevelsMenu}
+              aria-haspopup="true"
+            >
+              <Layers className="w-3.5 h-3.5 text-stone-400" />
+              <span className="text-[10px] font-mono uppercase tracking-wider">
+                Levels
+              </span>
+              <span className="text-[9px] font-mono text-stone-300 px-1 py-0.2 bg-stone-800/90 rounded-[2px] border border-stone-700/60 leading-none">
+                {currentStory === 1 ? '1' : '2'}
+              </span>
+              <ChevronDown
+                className={`w-3 h-3 text-stone-400 transition-transform duration-150 ${
+                  showLevelsMenu ? 'rotate-180 text-stone-200' : ''
+                }`}
+              />
+            </button>
 
-          <span className="w-px h-3 bg-stone-800 mx-0.5" />
+            {/* Dropdown Menu */}
+            {showLevelsMenu && (
+              <div className="absolute top-full left-0 mt-1.5 w-36 bg-[#141418]/98 border border-stone-800 rounded-sm shadow-2xl py-1 z-50 backdrop-blur-md">
+                <button
+                  onClick={() => {
+                    onTeleportToStory?.(1);
+                    setShowLevelsMenu(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-1.5 text-left text-xs font-mono tracking-wider transition-colors cursor-pointer ${
+                    currentStory === 1
+                      ? 'bg-stone-200 text-stone-900 font-semibold'
+                      : 'text-stone-300 hover:text-white hover:bg-stone-800/70'
+                  }`}
+                >
+                  <span>Level 1</span>
+                  {currentStory === 1 && <Check className="w-3 h-3 stroke-[2.5]" />}
+                </button>
 
-          {/* Exhibition index drawer toggle */}
-          <button
-            onClick={() => setShowCatalogDrawer(!showCatalogDrawer)}
-            className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-100 py-1 px-2 transition-colors cursor-pointer rounded-sm hover:bg-stone-800/40"
-            title="View Collection Index"
-          >
-            <Compass className="w-3.5 h-3.5" />
-            <span className="text-[10px] font-mono uppercase tracking-wider">
-              Index
-            </span>
-          </button>
+                <button
+                  onClick={() => {
+                    onTeleportToStory?.(2);
+                    setShowLevelsMenu(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-1.5 text-left text-xs font-mono tracking-wider transition-colors cursor-pointer ${
+                    currentStory === 2
+                      ? 'bg-stone-200 text-stone-900 font-semibold shadow-xs'
+                      : 'text-stone-300 hover:text-white hover:bg-stone-800/70'
+                  }`}
+                >
+                  <span>Level 2</span>
+                  {currentStory === 2 && <Check className="w-3 h-3 stroke-[2.5]" />}
+                </button>
+              </div>
+            )}
+          </div>
 
           <span className="w-px h-3 bg-stone-800 mx-0.5" />
 
@@ -124,173 +162,9 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
         </div>
       </header>
 
-      {/* Center Right: Selected Exhibit Details Card (when inspecting) - Shifted right & scaled compact */}
-      {selectedExhibit && navigationMode === 'inspecting' && (
-        <aside className="pointer-events-auto absolute top-16 md:top-20 right-3 md:right-5 w-72 sm:w-80 max-w-[85vw] max-h-[calc(100vh-130px)] overflow-y-auto bg-[#131317]/96 border border-stone-800/80 p-5 rounded-sm shadow-2xl transition-all duration-300 animate-fade-in text-stone-300">
-          <div className="flex items-center justify-between border-b border-stone-800/80 pb-2.5 mb-3.5">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-stone-400">
-              Exhibit {selectedExhibit.number} · {selectedExhibit.category}
-            </span>
-            <button
-              onClick={handleResumeFreeWalk}
-              className="text-stone-500 hover:text-stone-200 transition-colors p-1"
-              title="Close Inspection View"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
 
-          <div className="space-y-3">
-            <div>
-              <h2 className="font-serif text-xl sm:text-2xl font-light tracking-wide text-stone-100">
-                {selectedExhibit.title}
-              </h2>
-              <p className="text-[11px] text-stone-400 tracking-wider mt-0.5 font-light italic">
-                {selectedExhibit.subtitle}
-              </p>
-            </div>
 
-            <p className="text-xs leading-relaxed text-stone-300 font-light border-l border-stone-700/60 pl-2.5 py-0.5">
-              {selectedExhibit.description}
-            </p>
 
-            <div className="pt-1.5 border-t border-stone-800/80 space-y-1.5 text-[10px] sm:text-[11px]">
-              <div className="flex justify-between py-0.5 border-b border-stone-800/40">
-                <span className="text-stone-500 tracking-wider uppercase font-mono">Materials</span>
-                <span className="text-stone-300 font-light text-right">
-                  {selectedExhibit.materials.join(' · ')}
-                </span>
-              </div>
-              <div className="flex justify-between py-0.5 border-b border-stone-800/40">
-                <span className="text-stone-500 tracking-wider uppercase font-mono">Dimensions</span>
-                <span className="text-stone-300 font-mono">{selectedExhibit.dimensions}</span>
-              </div>
-              <div className="flex justify-between py-0.5 border-b border-stone-800/40">
-                <span className="text-stone-500 tracking-wider uppercase font-mono">Weight</span>
-                <span className="text-stone-300 font-mono">{selectedExhibit.weight}</span>
-              </div>
-              <div className="flex justify-between py-0.5">
-                <span className="text-stone-500 tracking-wider uppercase font-mono">Colorway</span>
-                <span className="text-stone-300 font-light">{selectedExhibit.colorway}</span>
-              </div>
-            </div>
-
-            <div className="bg-[#0f0f12]/80 p-2.5 rounded-sm border border-stone-800/50 mt-2">
-              <span className="block text-[9px] font-mono tracking-widest uppercase text-stone-500 mb-0.5">
-                Curator Note
-              </span>
-              <p className="text-[11px] text-stone-400 font-light italic leading-snug">
-                "{selectedExhibit.curatorNote}"
-              </p>
-            </div>
-
-            {/* Price & Acquisition Action */}
-            <div className="pt-2 border-t border-stone-800/80 space-y-2">
-              <div className="flex items-baseline justify-between px-1">
-                <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">
-                  Acquisition Value
-                </span>
-                <div className="text-right">
-                  <span className="font-serif text-lg text-stone-100 font-light">
-                    ${selectedExhibit.price}
-                  </span>
-                  <span className="text-[10px] font-mono text-stone-400 ml-1">USD</span>
-                </div>
-              </div>
-
-              <button
-                onClick={() => onAcquireAtCounter(selectedExhibit)}
-                className="w-full bg-stone-200 hover:bg-white text-stone-900 text-[11px] font-medium tracking-wider uppercase py-2.5 px-3 rounded-sm transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer hover:scale-[1.01] active:scale-[0.99]"
-              >
-                <ShoppingBag className="w-3.5 h-3.5 text-stone-900" />
-                <span>Acquire Piece at Counter</span>
-              </button>
-            </div>
-
-            {/* Orbit & Resume Actions */}
-            <div className="pt-2 flex items-center gap-2">
-              <button
-                onClick={handleResumeFreeWalk}
-                className="flex-1 bg-stone-200 text-stone-900 hover:bg-white text-[11px] font-medium tracking-wider uppercase py-2 px-3 rounded-sm transition-colors text-center"
-              >
-                Resume Free Walk
-              </button>
-              <div className="flex gap-1">
-                <button
-                  onClick={handlePrevExhibit}
-                  className="p-2 bg-stone-800/60 hover:bg-stone-800 text-stone-300 rounded-sm border border-stone-700/50 transition-colors"
-                  title="Previous Pedestal"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={handleNextExhibit}
-                  className="p-2 bg-stone-800/60 hover:bg-stone-800 text-stone-300 rounded-sm border border-stone-700/50 transition-colors"
-                  title="Next Pedestal"
-                >
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-            <p className="text-[9px] text-stone-500 text-center tracking-wider pt-0.5">
-              Drag mouse/touch to orbit 360°
-            </p>
-          </div>
-        </aside>
-      )}
-
-      {/* Catalog / Index Drawer */}
-      {showCatalogDrawer && (
-        <aside className="pointer-events-auto absolute top-20 right-6 md:right-8 w-80 bg-[#161619]/98 border border-stone-800 p-5 rounded-sm shadow-2xl z-30 transition-all animate-fade-in">
-          <div className="flex items-center justify-between border-b border-stone-800 pb-2 mb-4">
-            <span className="text-xs font-mono uppercase tracking-widest text-stone-400">
-              Exhibition Catalog
-            </span>
-            <button
-              onClick={() => setShowCatalogDrawer(false)}
-              className="text-stone-500 hover:text-stone-200 p-1"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="space-y-1.5">
-            {EXHIBITS.map((item, idx) => {
-              const isSelected = selectedExhibit?.id === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    handleSelectExhibitByIndex(idx);
-                    setShowCatalogDrawer(false);
-                  }}
-                  className={`w-full text-left p-2.5 rounded-sm flex items-center justify-between border transition-all ${
-                    isSelected
-                      ? 'border-stone-600 bg-stone-800/70 text-stone-100'
-                      : 'border-transparent hover:border-stone-800 hover:bg-stone-800/30 text-stone-400'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-mono text-stone-500">
-                      {item.number}
-                    </span>
-                    <div>
-                      <div className="font-serif text-sm tracking-wide text-stone-200">
-                        {item.title}
-                      </div>
-                      <div className="text-[10px] text-stone-500 font-mono tracking-wider">
-                        {item.category}
-                      </div>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-3 h-3 text-stone-500" />
-                </button>
-              );
-            })}
-          </div>
-        </aside>
-      )}
 
       {/* Philosophy / Brand Modal */}
       {showInfoModal && (
@@ -329,10 +203,31 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
         </div>
       )}
 
+      {/* Intuitive initial turn guidance pill */}
+      {showTurnHint && (
+        <div className="pointer-events-none absolute bottom-14 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2.5 bg-[#121216]/95 border border-stone-700/80 px-4 py-2 rounded-full shadow-2xl backdrop-blur-md transition-opacity duration-700 animate-fade-in select-none">
+          <span className="w-1.5 h-1.5 rounded-full bg-stone-300 animate-ping" />
+          <span className="text-[11px] font-mono tracking-wide text-stone-200">
+            Click & hold mouse anywhere, then drag to turn
+          </span>
+        </div>
+      )}
+
       {/* Bottom Navigation Dock - Compact & Non-obstructive */}
       <footer className="w-full flex items-end justify-between gap-4 pointer-events-none">
-        {/* Minimal, elegant navigation instructions badge (bottom left) */}
-        <div className="pointer-events-auto flex items-center gap-2 sm:gap-3 bg-[#121216]/94 border border-stone-800/80 px-3 py-1.5 rounded-sm shadow-lg text-[10px] text-stone-400 select-none font-['Helvetica_Neue',Helvetica,Arial,sans-serif]">
+        {/* Navigation instructions guide (bottom left) */}
+        <div className="pointer-events-auto flex items-center gap-2.5 sm:gap-3 bg-[#121216]/94 border border-stone-800/80 px-3.5 py-1.5 rounded-sm shadow-lg text-[10px] text-stone-400 select-none font-['Helvetica_Neue',Helvetica,Arial,sans-serif]">
+          {/* Click & Turn with mouse */}
+          <div className="flex items-center gap-1.5 text-stone-200">
+            <span className="px-1.5 py-0.5 bg-stone-800/90 border border-stone-700/70 rounded-[2px] text-[9px] font-mono text-stone-100 font-medium">
+              Click & Drag
+            </span>
+            <span className="tracking-wide text-stone-300">Turn / Look</span>
+          </div>
+
+          <span className="text-stone-700 font-mono">/</span>
+
+          {/* Keyboard Walk guidance */}
           <div className="flex items-center gap-1.5 text-stone-300">
             <span className="flex items-center gap-0.5">
               <kbd className="px-1 py-0.5 bg-stone-800/90 border border-stone-700/70 rounded-[2px] text-[9px] font-mono text-stone-200 leading-none">W</kbd>
@@ -340,56 +235,22 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
               <kbd className="px-1 py-0.5 bg-stone-800/90 border border-stone-700/70 rounded-[2px] text-[9px] font-mono text-stone-200 leading-none">S</kbd>
               <kbd className="px-1 py-0.5 bg-stone-800/90 border border-stone-700/70 rounded-[2px] text-[9px] font-mono text-stone-200 leading-none">D</kbd>
             </span>
-            <span className="tracking-wide">Move</span>
-          </div>
-
-          <span className="text-stone-700 font-mono">/</span>
-
-          <div className="flex items-center gap-1 text-stone-300">
-            <span className="text-stone-400 hidden xs:inline">Drag</span>
-            <span className="tracking-wide">Look</span>
-          </div>
-
-          <span className="text-stone-700 font-mono hidden sm:inline">/</span>
-
-          <div className="hidden sm:flex items-center gap-1 text-stone-300">
-            <span className="tracking-wide text-stone-400">Click Pedestal to Inspect</span>
+            <span className="tracking-wide text-stone-400">Move</span>
           </div>
         </div>
 
-        {/* Curated Waypoints quick jump buttons (01 - 05) */}
+        {/* Home overview button (bottom right) */}
         <div className="pointer-events-auto ml-auto flex items-center bg-[#141418]/94 border border-stone-800/80 p-1 rounded-sm gap-0.5 shadow-xl">
           <button
-            onClick={handleResumeFreeWalk}
-            className={`px-2.5 py-1 text-xs font-mono tracking-wider transition-all rounded-sm flex items-center gap-1 cursor-pointer ${
-              navigationMode === 'free'
-                ? 'bg-stone-200 text-stone-900 font-semibold shadow-sm'
-                : 'text-stone-400 hover:text-stone-100 hover:bg-stone-800/40'
-            }`}
+            onClick={onResetCamera}
+            className="flex items-center gap-1.5 text-xs text-stone-300 hover:text-white py-1 px-2.5 transition-colors cursor-pointer rounded-sm hover:bg-stone-800/60 font-medium"
+            title="Home: Return to original overview position"
           >
-            <Eye className="w-3 h-3" />
-            <span className="text-[10px]">Walk</span>
+            <Home className="w-3.5 h-3.5" />
+            <span className="text-[10px] font-mono uppercase tracking-wider">
+              Home
+            </span>
           </button>
-
-          <span className="w-px h-3 bg-stone-800 mx-0.5" />
-
-          {EXHIBITS.map((item, idx) => {
-            const isSelected = selectedExhibit?.id === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleSelectExhibitByIndex(idx)}
-                className={`px-2 py-1 text-xs font-mono transition-all rounded-sm cursor-pointer ${
-                  isSelected
-                    ? 'bg-stone-200 text-stone-900 font-semibold shadow-sm'
-                    : 'text-stone-400 hover:text-stone-100 hover:bg-stone-800/40'
-                }`}
-                title={`${item.number}: ${item.title}`}
-              >
-                {item.number}
-              </button>
-            );
-          })}
         </div>
       </footer>
     </div>
