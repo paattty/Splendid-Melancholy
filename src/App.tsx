@@ -14,10 +14,10 @@ export default function App() {
   const [resetCameraTrigger, setResetCameraTrigger] = useState<number>(0);
   const [isCounterOpen, setIsCounterOpen] = useState<boolean>(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [currentStory, setCurrentStory] = useState<1 | 2>(1);
-  const [teleportTargetStory, setTeleportTargetStory] = useState<{ story: 1 | 2; id: number } | null>(null);
+  const [currentStory, setCurrentStory] = useState<1 | 2 | 'exterior'>(1);
+  const [teleportTargetStory, setTeleportTargetStory] = useState<{ story: 1 | 2 | 'exterior'; id: number } | null>(null);
 
-  const handleTeleportToStory = React.useCallback((story: 1 | 2) => {
+  const handleTeleportToStory = React.useCallback((story: 1 | 2 | 'exterior') => {
     setSelectedExhibit(null);
     setIsCounterOpen(false);
     setNavigationMode('free');

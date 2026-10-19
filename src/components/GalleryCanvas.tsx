@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { EXHIBITS } from '../data/exhibits';
 import { ExhibitItem, NavigationMode } from '../types/gallery';
+import { buildStoreExterior } from '../utils/storeExterior';
 
 interface GalleryCanvasProps {
   selectedExhibit: ExhibitItem | null;
@@ -13,9 +14,9 @@ interface GalleryCanvasProps {
   onHoverExhibit: (exhibit: ExhibitItem | null) => void;
   resetCameraTrigger?: number;
   onOpenCounter?: () => void;
-  currentStory?: 1 | 2;
-  onStoryChange?: (story: 1 | 2) => void;
-  teleportTargetStory?: { story: 1 | 2; id: number } | null;
+  currentStory?: 1 | 2 | 'exterior';
+  onStoryChange?: (story: 1 | 2 | 'exterior') => void;
+  teleportTargetStory?: { story: 1 | 2 | 'exterior'; id: number } | null;
 }
 
 interface PedestalNode {
@@ -70,7 +71,8 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
   const onOpenCounterRef = useRef(onOpenCounter);
   onOpenCounterRef.current = onOpenCounter;
 
-  const currentStoryRef = useRef<1 | 2>(currentStory);
+  const currentStoryRef = useRef<1 | 2 | 'exterior'>(currentStory);
+  currentStoryRef.current = currentStory;
   const onStoryChangeRef = useRef(onStoryChange);
   onStoryChangeRef.current = onStoryChange;
 
@@ -90,6 +92,36 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
   const isDragging = useRef<boolean>(false);
   const dragStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragDistance = useRef<number>(0);
+  const lastDoorTransitionTime = useRef<number>(0);
+
+  // Seamless portal transition state between exterior and interior
+  const [doorFade, setDoorFade] = useState<{ active: boolean; opacity: number; label: string }>({
+    active: false,
+    opacity: 0,
+    label: '',
+  });
+
+  const doorFadeRef = useRef<{
+    active: boolean;
+    startTime: number;
+    duration: number;
+    halfPassed: boolean;
+    targetStory: 1 | 2 | 'exterior';
+    targetPos: THREE.Vector3;
+    targetYaw: number;
+    targetPitch: number;
+    label: string;
+  }>({
+    active: false,
+    startTime: 0,
+    duration: 0.55,
+    halfPassed: false,
+    targetStory: 1,
+    targetPos: new THREE.Vector3(),
+    targetYaw: Math.PI,
+    targetPitch: -0.06,
+    label: '',
+  });
 
   // Smooth Home / Overview Reset transition state
   const resetTransition = useRef<{
@@ -200,30 +232,33 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
     if (resetCameraTrigger > 0 && resetCameraTrigger !== lastResetTrigger.current) {
       lastResetTrigger.current = resetCameraTrigger;
       cameraVelocity.current.set(0, 0, 0);
-      isElevatedHome.current = true;
       inspectTransition.current.active = false;
 
-      // Start smooth cinematic return to panoramic overview viewpoint
       resetTransition.current.active = true;
       resetTransition.current.startTime = performance.now();
       resetTransition.current.startPos.copy(cameraPos.current);
-      resetTransition.current.targetPos.set(0, 2.8, 13.0);
-      resetTransition.current.startYaw = cameraYaw.current;
 
-      // Calculate shortest angular turn to Math.PI
-      let diff = Math.PI - (cameraYaw.current % (Math.PI * 2));
-      while (diff < -Math.PI) diff += Math.PI * 2;
-      while (diff > Math.PI) diff -= Math.PI * 2;
-      resetTransition.current.targetYaw = cameraYaw.current + diff;
-
-      resetTransition.current.startPitch = cameraPitch.current;
-      resetTransition.current.targetPitch = -0.16;
-
-      targetYaw.current = resetTransition.current.targetYaw;
-      targetPitch.current = -0.16;
-
-      currentStoryRef.current = 1;
-      onStoryChangeRef.current?.(1);
+      if (currentStoryRef.current === 'exterior') {
+        // From exterior, clicking Entrance returns visitor smoothly to store entrance
+        triggerTeleport(1);
+      } else {
+        isElevatedHome.current = true;
+        resetTransition.current.active = true;
+        resetTransition.current.startTime = performance.now();
+        resetTransition.current.startPos.copy(cameraPos.current);
+        resetTransition.current.targetPos.set(0, 1.62, 13.0);
+        resetTransition.current.startYaw = cameraYaw.current;
+        let diff = Math.PI - (cameraYaw.current % (Math.PI * 2));
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        resetTransition.current.targetYaw = cameraYaw.current + diff;
+        resetTransition.current.startPitch = cameraPitch.current;
+        resetTransition.current.targetPitch = -0.06;
+        targetYaw.current = resetTransition.current.targetYaw;
+        targetPitch.current = -0.06;
+        currentStoryRef.current = 1;
+        onStoryChangeRef.current?.(1);
+      }
     }
   }, [resetCameraTrigger]);
 
@@ -246,29 +281,80 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
     targetTarget: new THREE.Vector3(),
   });
 
-  const triggerTeleport = useCallback((targetStory: 1 | 2) => {
+  const triggerTeleport = useCallback((targetStory: 1 | 2 | 'exterior') => {
     resetTransition.current.active = false;
     inspectTransition.current.active = false;
     isElevatedHome.current = false;
     cameraVelocity.current.set(0, 0, 0);
 
-    const targetY = targetStory === 2 ? 6.0 + 1.62 : 1.62;
-    const targetZ = 10.5;
-    const lookTargetY = targetStory === 2 ? 6.0 + 1.45 : 1.3;
+    let targetX = 0;
+    let targetY = 1.62;
+    let targetZ = 12.8;
+    let lookTargetX = 0;
+    let lookTargetY = 1.3;
+    let lookTargetZ = 0;
+    let targetYawVal = Math.PI;
+    let targetPitchVal = -0.06;
 
-    teleportTransition.current.active = true;
-    teleportTransition.current.startTime = performance.now();
-    teleportTransition.current.duration = 0.75;
-    teleportTransition.current.startPos.copy(cameraPos.current);
-    teleportTransition.current.targetPos.set(0, targetY, targetZ);
-    teleportTransition.current.startTarget.copy(cameraTarget.current);
-    teleportTransition.current.targetTarget.set(0, lookTargetY, 0);
+    const isExteriorTransition =
+      (currentStoryRef.current === 'exterior' && targetStory !== 'exterior') ||
+      (currentStoryRef.current !== 'exterior' && targetStory === 'exterior');
 
-    targetYaw.current = Math.PI;
-    targetPitch.current = -0.06;
+    if (targetStory === 'exterior') {
+      // Vantage point outside store on plaza looking at monolithic flagship building
+      targetX = -15.2;
+      targetY = 1.65;
+      targetZ = 126.0;
+      lookTargetX = -2.0;
+      lookTargetY = 11.2;
+      lookTargetZ = 96.0;
+      targetYawVal = Math.atan2(lookTargetX - targetX, lookTargetZ - targetZ);
+      const horiz = Math.hypot(lookTargetX - targetX, lookTargetZ - targetZ);
+      targetPitchVal = Math.atan2(lookTargetY - targetY, horiz);
+    } else if (targetStory === 2) {
+      targetY = 6.0 + 1.62;
+      targetZ = 10.5;
+      lookTargetY = 6.0 + 1.45;
+    } else {
+      // Store entrance vantage point on Level 1 looking in toward exhibits
+      targetX = 0;
+      targetY = 1.62;
+      targetZ = 13.0;
+      lookTargetX = 0;
+      lookTargetY = 1.3;
+      lookTargetZ = 0;
+      targetYawVal = Math.PI;
+      targetPitchVal = -0.06;
+    }
 
-    currentStoryRef.current = targetStory;
-    onStoryChangeRef.current?.(targetStory);
+    if (isExteriorTransition) {
+      // Seamless portal transition: smooth cinematic dip without flying 100 meters through void
+      teleportTransition.current.active = false;
+      doorFadeRef.current.active = true;
+      doorFadeRef.current.startTime = performance.now();
+      doorFadeRef.current.duration = 0.55;
+      doorFadeRef.current.halfPassed = false;
+      doorFadeRef.current.targetStory = targetStory;
+      doorFadeRef.current.targetPos.set(targetX, targetY, targetZ);
+      doorFadeRef.current.targetYaw = targetYawVal;
+      doorFadeRef.current.targetPitch = targetPitchVal;
+      doorFadeRef.current.label = targetStory === 'exterior' ? 'Store Exterior' : 'Store Entrance';
+      setDoorFade({ active: true, opacity: 0.05, label: doorFadeRef.current.label });
+    } else {
+      teleportTransition.current.active = true;
+      teleportTransition.current.startTime = performance.now();
+      teleportTransition.current.duration = 0.85;
+      teleportTransition.current.startPos.copy(cameraPos.current);
+      teleportTransition.current.targetPos.set(targetX, targetY, targetZ);
+      teleportTransition.current.startTarget.copy(cameraTarget.current);
+      teleportTransition.current.targetTarget.set(lookTargetX, lookTargetY, lookTargetZ);
+
+      targetYaw.current = targetYawVal;
+      targetPitch.current = targetPitchVal;
+
+      currentStoryRef.current = targetStory;
+      onStoryChangeRef.current?.(targetStory);
+    }
   }, []);
 
   const lastTeleportId = useRef<number | null>(null);
@@ -452,9 +538,149 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
     // Double-height architectural perimeter walls (matching chic dusty blush rose matte plaster)
     const totalWallHeight = 12.2;
     createWall(0, totalWallHeight / 2, -18, 40, totalWallHeight, 1);
-    createWall(0, totalWallHeight / 2, 18, 40, totalWallHeight, 1);
+    // South Wall with architectural portal opening for store entrance door (opening: X: [-2.2, 2.2], Y: [0, 3.8])
+    createWall(-11.1, totalWallHeight / 2, 18, 17.8, totalWallHeight, 1);
+    createWall(11.1, totalWallHeight / 2, 18, 17.8, totalWallHeight, 1);
+    createWall(0, 8.0, 18, 4.4, 8.4, 1);
     createWall(-18, totalWallHeight / 2, 0, 1, totalWallHeight, 40);
     createWall(18, totalWallHeight / 2, 0, 1, totalWallHeight, 40);
+
+    // Interior Entrance Portal & Double Glass Doors
+    // Clearly visible from inside the store on Level 1 looking toward South Wall (Z = 17.6)
+    const interiorDoorGroup = new THREE.Group();
+    interiorDoorGroup.name = 'InteriorEntranceDoor';
+
+    const steelPortalMat = new THREE.MeshStandardMaterial({
+      color: 0x22242a,
+      metalness: 0.88,
+      roughness: 0.22,
+    });
+
+    const brushedMetalMat = new THREE.MeshStandardMaterial({
+      color: 0xd6dade,
+      metalness: 0.94,
+      roughness: 0.16,
+    });
+
+    // Outer portal frame casing lining the wall cutout
+    const portalLeftJamb = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.8, 1.05), steelPortalMat);
+    portalLeftJamb.position.set(-2.15, 1.9, 18.0);
+    interiorDoorGroup.add(portalLeftJamb);
+
+    const portalRightJamb = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.8, 1.05), steelPortalMat);
+    portalRightJamb.position.set(2.15, 1.9, 18.0);
+    interiorDoorGroup.add(portalRightJamb);
+
+    const portalHeadReveal = new THREE.Mesh(new THREE.BoxGeometry(4.55, 0.25, 1.05), steelPortalMat);
+    portalHeadReveal.position.set(0, 3.75, 18.0);
+    interiorDoorGroup.add(portalHeadReveal);
+
+    const portalThreshold = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.03, 1.05), steelPortalMat);
+    portalThreshold.position.set(0, 0.015, 18.0);
+    interiorDoorGroup.add(portalThreshold);
+
+    // Double glass doors with architectural reflections and translucency
+    const interiorDoorGlassMat = new THREE.MeshPhysicalMaterial({
+      color: 0x182433,
+      transparent: true,
+      opacity: 0.68,
+      roughness: 0.06,
+      reflectivity: 0.88,
+      clearcoat: 1.0,
+      side: THREE.DoubleSide,
+    });
+
+    // Left and Right Glass Door Leaves
+    const doorLeafGeo = new THREE.PlaneGeometry(1.92, 2.7);
+    const leftDoorGlass = new THREE.Mesh(doorLeafGeo, interiorDoorGlassMat);
+    leftDoorGlass.position.set(-0.98, 1.38, 17.62);
+    interiorDoorGroup.add(leftDoorGlass);
+
+    const rightDoorGlass = new THREE.Mesh(doorLeafGeo, interiorDoorGlassMat);
+    rightDoorGlass.position.set(0.98, 1.38, 17.62);
+    interiorDoorGroup.add(rightDoorGlass);
+
+    // Upper transom glass window above doors
+    const transomGeo = new THREE.PlaneGeometry(3.9, 0.72);
+    const transomMesh = new THREE.Mesh(transomGeo, interiorDoorGlassMat);
+    transomMesh.position.set(0, 3.16, 17.62);
+    interiorDoorGroup.add(transomMesh);
+
+    // Transom dividing mullion bar
+    const mullionGeo = new THREE.BoxGeometry(4.0, 0.06, 0.07);
+    const mullionMesh = new THREE.Mesh(mullionGeo, brushedMetalMat);
+    mullionMesh.position.set(0, 2.76, 17.63);
+    interiorDoorGroup.add(mullionMesh);
+
+    // Center vertical dividing meeting stile between double doors
+    const centerMullionGeo = new THREE.BoxGeometry(0.06, 2.74, 0.07);
+    const centerMullion = new THREE.Mesh(centerMullionGeo, brushedMetalMat);
+    centerMullion.position.set(0, 1.38, 17.63);
+    interiorDoorGroup.add(centerMullion);
+
+    // Vertical brushed stainless steel pull handles (distinct doorHandleGeo avoids collision)
+    const doorHandleGeo = new THREE.CylinderGeometry(0.022, 0.022, 1.4, 16);
+    const handleLeft = new THREE.Mesh(doorHandleGeo, brushedMetalMat);
+    handleLeft.position.set(-0.16, 1.38, 17.52);
+    interiorDoorGroup.add(handleLeft);
+
+    const handleRight = new THREE.Mesh(doorHandleGeo, brushedMetalMat);
+    handleRight.position.set(0.16, 1.38, 17.52);
+    interiorDoorGroup.add(handleRight);
+
+    // Exterior outdoor daytime backdrop visible through the door glass
+    const outdoorBackdropGeo = new THREE.PlaneGeometry(8, 6);
+    const outdoorBackdropMat = new THREE.MeshBasicMaterial({
+      color: 0x98c6eb,
+      side: THREE.DoubleSide,
+    });
+    const outdoorBackdrop = new THREE.Mesh(outdoorBackdropGeo, outdoorBackdropMat);
+    outdoorBackdrop.position.set(0, 2.4, 20.2);
+    interiorDoorGroup.add(outdoorBackdrop);
+
+    // Entrance mat in polished basalt on floor
+    const matGeo = new THREE.BoxGeometry(4.2, 0.012, 2.0);
+    const matMaterial = new THREE.MeshStandardMaterial({
+      color: 0x1b1b1e,
+      roughness: 0.88,
+      metalness: 0.05,
+    });
+    const entranceMat = new THREE.Mesh(matGeo, matMaterial);
+    entranceMat.position.set(0, 0.006, 16.5);
+    entranceMat.receiveShadow = true;
+    interiorDoorGroup.add(entranceMat);
+
+    // Signage above door: "SPLENDID MELANCHOLY"
+    const interiorSignCanvas = document.createElement('canvas');
+    interiorSignCanvas.width = 1024;
+    interiorSignCanvas.height = 128;
+    const isCtx = interiorSignCanvas.getContext('2d')!;
+    isCtx.clearRect(0, 0, 1024, 128);
+    isCtx.fillStyle = '#e8ebed';
+    isCtx.font = 'bold 52px "Helvetica Neue", Helvetica, Arial, sans-serif';
+    isCtx.textAlign = 'center';
+    isCtx.textBaseline = 'middle';
+    isCtx.letterSpacing = '0.22em';
+    isCtx.fillText('SPLENDID MELANCHOLY', 512, 64);
+
+    const interiorSignTexture = new THREE.CanvasTexture(interiorSignCanvas);
+    const interiorSignGeo = new THREE.PlaneGeometry(3.2, 0.42);
+    const interiorSignMat = new THREE.MeshStandardMaterial({
+      map: interiorSignTexture,
+      transparent: true,
+      roughness: 0.25,
+      metalness: 0.8,
+    });
+    const interiorSign = new THREE.Mesh(interiorSignGeo, interiorSignMat);
+    interiorSign.position.set(0, 3.65, 17.64);
+    interiorDoorGroup.add(interiorSign);
+
+    // Soft daylight illumination entering from outside through the doorway
+    const doorGlowLight = new THREE.PointLight(0xfff5ea, 0.75, 10, 1.4);
+    doorGlowLight.position.set(0, 2.0, 16.8);
+    interiorDoorGroup.add(doorGlowLight);
+
+    scene.add(interiorDoorGroup);
 
     // STORY 2 FLOOR SLABS (Elevation Y = 6.0m, identical 36m x 36m footprint as Story 1)
     // Slabs feature an architectural cutout well for the staircase at X: [-14.6, -11.4], Z: [-6.8, 6.2]
@@ -793,6 +1019,9 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
     const story2WallWest = new THREE.PointLight(0xfff2f0, 0.45, 30, 1.3);
     story2WallWest.position.set(-15, 11.2, 0);
     scene.add(story2WallWest);
+
+    // Architectural Store Exterior (Waypoint building)
+    buildStoreExterior(scene);
 
     // 6. Curated Eyewear Pedestals (Architectural Monoliths)
     const pedestalNodes: PedestalNode[] = [];
@@ -1395,6 +1624,32 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
         }
       }
 
+      // Seamless Portal Fade Transition between Exterior and Interior
+      if (doorFadeRef.current.active) {
+        const elapsed = (time - doorFadeRef.current.startTime) / 1000;
+        const progress = Math.min(elapsed / doorFadeRef.current.duration, 1);
+        const opacity = progress < 0.45 ? progress / 0.45 : 1 - (progress - 0.45) / 0.55;
+        setDoorFade((prev) => ({ ...prev, active: true, opacity: Math.max(0, Math.min(1, opacity)) }));
+
+        if (progress >= 0.45 && !doorFadeRef.current.halfPassed) {
+          doorFadeRef.current.halfPassed = true;
+          cameraPos.current.copy(doorFadeRef.current.targetPos);
+          camera.position.copy(doorFadeRef.current.targetPos);
+          targetYaw.current = doorFadeRef.current.targetYaw;
+          cameraYaw.current = doorFadeRef.current.targetYaw;
+          targetPitch.current = doorFadeRef.current.targetPitch;
+          cameraPitch.current = doorFadeRef.current.targetPitch;
+          cameraVelocity.current.set(0, 0, 0);
+          currentStoryRef.current = doorFadeRef.current.targetStory;
+          onStoryChangeRef.current?.(doorFadeRef.current.targetStory);
+        }
+
+        if (progress >= 1) {
+          doorFadeRef.current.active = false;
+          setDoorFade({ active: false, opacity: 0, label: '' });
+        }
+      }
+
       // Smooth Camera Navigation Updates
       if (teleportTransition.current.active) {
         const elapsed = (time - teleportTransition.current.startTime) / 1000;
@@ -1417,19 +1672,24 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
         camera.position.copy(cameraPos.current);
         camera.lookAt(cameraTarget.current);
 
-        targetYaw.current = Math.atan2(
-          cameraTarget.current.x - cameraPos.current.x,
-          cameraTarget.current.z - cameraPos.current.z
-        );
+        const tDx = cameraTarget.current.x - cameraPos.current.x;
+        const tDy = cameraTarget.current.y - cameraPos.current.y;
+        const tDz = cameraTarget.current.z - cameraPos.current.z;
+        targetYaw.current = Math.atan2(tDx, tDz);
         cameraYaw.current = targetYaw.current;
+        const horizDist = Math.hypot(tDx, tDz);
+        targetPitch.current = Math.atan2(tDy, horizDist);
+        cameraPitch.current = targetPitch.current;
 
         if (progress >= 1) {
           teleportTransition.current.active = false;
           cameraVelocity.current.set(0, 0, 0);
-          const detectedStory = cameraPos.current.y >= 3.8 ? 2 : 1;
-          if (currentStoryRef.current !== detectedStory) {
-            currentStoryRef.current = detectedStory;
-            onStoryChangeRef.current?.(detectedStory);
+          if (currentStoryRef.current !== 'exterior') {
+            const detectedStory = cameraPos.current.y >= 3.8 ? 2 : 1;
+            if (currentStoryRef.current !== detectedStory) {
+              currentStoryRef.current = detectedStory;
+              onStoryChangeRef.current?.(detectedStory);
+            }
           }
         }
       } else if (resetTransition.current.active) {
@@ -1466,109 +1726,130 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
         const rotDamp = 1 - Math.exp(-22 * delta);
         cameraYaw.current += (targetYaw.current - cameraYaw.current) * rotDamp;
         cameraPitch.current += (targetPitch.current - cameraPitch.current) * rotDamp;
-
-        forwardVector.set(Math.sin(cameraYaw.current), 0, Math.cos(cameraYaw.current));
-        rightVector.set(-Math.cos(cameraYaw.current), 0, Math.sin(cameraYaw.current));
-
-        moveDirection.set(0, 0, 0);
-        const keys = keysPressed.current;
-        if (keys['KeyW'] || keys['ArrowUp']) moveDirection.add(forwardVector);
-        if (keys['KeyS'] || keys['ArrowDown']) moveDirection.sub(forwardVector);
-        if (keys['KeyA'] || keys['ArrowLeft']) moveDirection.sub(rightVector);
-        if (keys['KeyD'] || keys['ArrowRight']) moveDirection.add(rightVector);
-
-        const isMoving = moveDirection.lengthSq() > 0;
-        if (isMoving) {
-          // As soon as the user starts walking around, exit the elevated overview mode
-          isElevatedHome.current = false;
-          moveDirection.normalize();
-          const walkSpeed = 5.4;
-          cameraVelocity.current.addScaledVector(moveDirection, walkSpeed * delta * 7);
-          walkDistanceRef.current += delta * 6;
-        }
-
-        const velDamp = Math.exp(-8 * delta);
-        cameraVelocity.current.multiplyScalar(velDamp);
-
-        cameraPos.current.addScaledVector(cameraVelocity.current, delta);
-        cameraPos.current.x = Math.max(-15.5, Math.min(15.5, cameraPos.current.x));
-        cameraPos.current.z = Math.max(-15.5, Math.min(15.5, cameraPos.current.z));
-
-        // Calculate ground elevation smoothly without any glitching
-        // Staircase corridor: X centered at -13.0, runs between Z = 6.0 (bottom, 1F) and Z = -6.0 (top, 2F)
-        const onStairs = cameraPos.current.x >= -14.4 &&
-                         cameraPos.current.x <= -11.6 &&
-                         cameraPos.current.z >= -6.2 &&
-                         cameraPos.current.z <= 6.2;
-
-        let groundY = 0;
-        if (onStairs) {
-          // Continuous, seamless slope up the stairs from 0.0 to 6.0
-          const stairProgress = THREE.MathUtils.clamp((6.0 - cameraPos.current.z) / 12.0, 0, 1);
-          groundY = stairProgress * 6.0;
-
-          // Keep player safely within stair walkway width
-          cameraPos.current.x = THREE.MathUtils.clamp(cameraPos.current.x, -14.1, -11.9);
-        } else if (cameraPos.current.y >= 3.6) {
-          // On Story 2 floor (Elevation 6.0m)
-          groundY = 6.0;
-
-          // Mezzanine perimeter safety borders: Prevent stepping through glass balustrades into the stairwell opening
-          // East guardrail border (at X = -11.4): Keep visitor safely on the east floor
-          if (cameraPos.current.z > -5.75 && cameraPos.current.z < 6.35) {
-            if (cameraPos.current.x < -11.15 && cameraPos.current.x >= -13.0) {
-              cameraPos.current.x = -11.15;
-            }
-          }
-
-          // West guardrail border (at X = -14.6): Keep visitor safely on the west walkway
-          if (cameraPos.current.z > -5.75 && cameraPos.current.z < 6.35) {
-            if (cameraPos.current.x > -14.85 && cameraPos.current.x <= -13.0) {
-              cameraPos.current.x = -14.85;
-            }
-          }
-
-          // South guardrail border (at Z = 6.2): Keep visitor safely on the south bridge
-          if (cameraPos.current.x > -14.85 && cameraPos.current.x < -11.15) {
-            if (cameraPos.current.z < 6.45 && cameraPos.current.z >= 5.0) {
-              cameraPos.current.z = 6.45;
-            }
-          }
-
-          // North stair entrance safety: guide into stair walkway channel
-          if (cameraPos.current.z > -5.85 && (cameraPos.current.x < -14.2 || cameraPos.current.x > -11.8)) {
-            if (cameraPos.current.x <= -14.2 && cameraPos.current.x > -15.5) {
-              cameraPos.current.x = -14.85;
-            } else if (cameraPos.current.x >= -11.8 && cameraPos.current.x < -10.5) {
-              cameraPos.current.x = -11.15;
-            }
-          }
+        let isMoving = false;
+        if (currentStoryRef.current === 'exterior') {
+          // In exterior mode: users cannot walk around; camera is locked at the viewpoint to admire the store
+          cameraVelocity.current.set(0, 0, 0);
+          cameraPos.current.set(-15.2, 1.65, 126.0);
         } else {
-          // On Story 1 floor (Ground level 0.0m)
-          groundY = 0.0;
+          forwardVector.set(Math.sin(cameraYaw.current), 0, Math.cos(cameraYaw.current));
+          rightVector.set(-Math.cos(cameraYaw.current), 0, Math.sin(cameraYaw.current));
 
-          // Ground floor stair clearance safety: Prevent walking into low staircase underside from the sides
-          if (cameraPos.current.z >= 2.0 && cameraPos.current.z <= 6.2 && !onStairs) {
-            if (cameraPos.current.x > -14.5 && cameraPos.current.x < -13.0) {
-              cameraPos.current.x = -14.6;
-            } else if (cameraPos.current.x >= -13.0 && cameraPos.current.x < -11.5) {
-              cameraPos.current.x = -11.4;
-            }
+          moveDirection.set(0, 0, 0);
+          const keys = keysPressed.current;
+          if (keys['KeyW'] || keys['ArrowUp']) moveDirection.add(forwardVector);
+          if (keys['KeyS'] || keys['ArrowDown']) moveDirection.sub(forwardVector);
+          if (keys['KeyA'] || keys['ArrowLeft']) moveDirection.sub(rightVector);
+          if (keys['KeyD'] || keys['ArrowRight']) moveDirection.add(rightVector);
+
+          isMoving = moveDirection.lengthSq() > 0;
+          if (isMoving) {
+            // As soon as the user starts walking around, exit the elevated overview mode
+            isElevatedHome.current = false;
+            moveDirection.normalize();
+            const walkSpeed = 5.4;
+            cameraVelocity.current.addScaledVector(moveDirection, walkSpeed * delta * 7);
+            walkDistanceRef.current += delta * 6;
           }
+
+          const velDamp = Math.exp(-8 * delta);
+          cameraVelocity.current.multiplyScalar(velDamp);
+
+          cameraPos.current.addScaledVector(cameraVelocity.current, delta);
         }
 
-        const targetEyeY = (isElevatedHome.current && groundY === 0)
-          ? 2.8
-          : groundY + 1.62;
+        if (currentStoryRef.current !== 'exterior') {
+          cameraPos.current.x = Math.max(-15.5, Math.min(15.5, cameraPos.current.x));
 
-        // Ultra-smooth, responsive vertical follow with zero lag or pop
-        cameraPos.current.y += (targetEyeY - cameraPos.current.y) * (1 - Math.exp(-14.0 * delta));
+          // Seamless Door Walk-through from interior to exterior
+          // If the visitor walks towards the entrance door on Level 1 (X: [-2.0, 2.0], Z >= 16.5)
+          const isAtInteriorDoor = cameraPos.current.x >= -2.0 && cameraPos.current.x <= 2.0;
+          if (isAtInteriorDoor && cameraPos.current.z >= 16.5 && cameraPos.current.y <= 2.5) {
+            if (time - lastDoorTransitionTime.current > 1600 && !teleportTransition.current.active && !doorFadeRef.current.active) {
+              lastDoorTransitionTime.current = time;
+              triggerTeleport('exterior');
+            }
+          }
 
-        // Update current story state if user walked up or down the stairs on foot
-        const activeStory = groundY >= 3.0 ? 2 : 1;
-        if (activeStory !== currentStoryRef.current) {
-          currentStoryRef.current = activeStory;
-          onStoryChangeRef.current?.(activeStory);
+          const maxZ = isAtInteriorDoor ? 17.5 : 15.5;
+          cameraPos.current.z = Math.max(-15.5, Math.min(maxZ, cameraPos.current.z));
+
+          // Calculate ground elevation smoothly without any glitching
+          // Staircase corridor: X centered at -13.0, runs between Z = 6.0 (bottom, 1F) and Z = -6.0 (top, 2F)
+          const onStairs = cameraPos.current.x >= -14.4 &&
+                           cameraPos.current.x <= -11.6 &&
+                           cameraPos.current.z >= -6.2 &&
+                           cameraPos.current.z <= 6.2;
+
+          let groundY = 0;
+          if (onStairs) {
+            // Continuous, seamless slope up the stairs from 0.0 to 6.0
+            const stairProgress = THREE.MathUtils.clamp((6.0 - cameraPos.current.z) / 12.0, 0, 1);
+            groundY = stairProgress * 6.0;
+
+            // Keep player safely within stair walkway width
+            cameraPos.current.x = THREE.MathUtils.clamp(cameraPos.current.x, -14.1, -11.9);
+          } else if (cameraPos.current.y >= 3.6) {
+            // On Story 2 floor (Elevation 6.0m)
+            groundY = 6.0;
+
+            // Mezzanine perimeter safety borders: Prevent stepping through glass balustrades into the stairwell opening
+            // East guardrail border (at X = -11.4): Keep visitor safely on the east floor
+            if (cameraPos.current.z > -5.75 && cameraPos.current.z < 6.35) {
+              if (cameraPos.current.x < -11.15 && cameraPos.current.x >= -13.0) {
+                cameraPos.current.x = -11.15;
+              }
+            }
+
+            // West guardrail border (at X = -14.6): Keep visitor safely on the west walkway
+            if (cameraPos.current.z > -5.75 && cameraPos.current.z < 6.35) {
+              if (cameraPos.current.x > -14.85 && cameraPos.current.x <= -13.0) {
+                cameraPos.current.x = -14.85;
+              }
+            }
+
+            // South guardrail border (at Z = 6.2): Keep visitor safely on the south bridge
+            if (cameraPos.current.x > -14.85 && cameraPos.current.x < -11.15) {
+              if (cameraPos.current.z < 6.45 && cameraPos.current.z >= 5.0) {
+                cameraPos.current.z = 6.45;
+              }
+            }
+
+            // North stair entrance safety: guide into stair walkway channel
+            if (cameraPos.current.z > -5.85 && (cameraPos.current.x < -14.2 || cameraPos.current.x > -11.8)) {
+              if (cameraPos.current.x <= -14.2 && cameraPos.current.x > -15.5) {
+                cameraPos.current.x = -14.85;
+              } else if (cameraPos.current.x >= -11.8 && cameraPos.current.x < -10.5) {
+                cameraPos.current.x = -11.15;
+              }
+            }
+          } else {
+            // On Story 1 floor (Ground level 0.0m)
+            groundY = 0.0;
+
+            // Ground floor stair clearance safety: Prevent walking into low staircase underside from the sides
+            if (cameraPos.current.z >= 2.0 && cameraPos.current.z <= 6.2 && !onStairs) {
+              if (cameraPos.current.x > -14.5 && cameraPos.current.x < -13.0) {
+                cameraPos.current.x = -14.6;
+              } else if (cameraPos.current.x >= -13.0 && cameraPos.current.x < -11.5) {
+                cameraPos.current.x = -11.4;
+              }
+            }
+          }
+
+          const targetEyeY = (isElevatedHome.current && groundY === 0)
+            ? 2.8
+            : groundY + 1.62;
+
+          // Ultra-smooth, responsive vertical follow with zero lag or pop
+          cameraPos.current.y += (targetEyeY - cameraPos.current.y) * (1 - Math.exp(-14.0 * delta));
+
+          // Update current story state if user walked up or down the stairs on foot
+          const activeStory = groundY >= 3.0 ? 2 : 1;
+          if (activeStory !== currentStoryRef.current) {
+            currentStoryRef.current = activeStory;
+            onStoryChangeRef.current?.(activeStory);
+          }
         }
 
         const bob = isMoving ? Math.sin(walkDistanceRef.current) * 0.012 : 0;
@@ -1803,13 +2084,24 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
   const handleResetCamera = useCallback(() => {
     onNavigationModeChange('free');
     onSelectExhibit(null);
-    isElevatedHome.current = true;
-    cameraPos.current.set(0, 2.8, 13.0);
-    targetYaw.current = Math.PI;
-    cameraYaw.current = Math.PI;
-    targetPitch.current = -0.16;
-    cameraPitch.current = -0.16;
-    cameraVelocity.current.set(0, 0, 0);
+    if (currentStoryRef.current === 'exterior') {
+      cameraPos.current.set(-15.2, 3.6, 126.0);
+      const lookAt = new THREE.Vector3(-2.0, 11.2, 96.0);
+      cameraTarget.current.copy(lookAt);
+      targetYaw.current = Math.atan2(lookAt.x - (-15.2), lookAt.z - 126.0);
+      cameraYaw.current = targetYaw.current;
+      targetPitch.current = 0.22;
+      cameraPitch.current = 0.22;
+      cameraVelocity.current.set(0, 0, 0);
+    } else {
+      isElevatedHome.current = true;
+      cameraPos.current.set(0, 2.8, 13.0);
+      targetYaw.current = Math.PI;
+      cameraYaw.current = Math.PI;
+      targetPitch.current = -0.16;
+      cameraPitch.current = -0.16;
+      cameraVelocity.current.set(0, 0, 0);
+    }
   }, [onNavigationModeChange, onSelectExhibit]);
 
   // Reusable vectors for touch navigation impulses
@@ -1818,6 +2110,7 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
 
   // On-screen walk navigation helper for mobile or direct click buttons
   const moveStep = useCallback((direction: 'forward' | 'backward' | 'left' | 'right') => {
+    if (currentStoryRef.current === 'exterior') return;
     isElevatedHome.current = false;
     if (navModeRef.current !== 'free') {
       onNavigationModeChange('free');
@@ -1844,8 +2137,28 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
     >
       <canvas ref={canvasRef} className="w-full h-full block" />
 
-      {/* On-screen Directional Touch Controls - Low-profile and non-obstructive */}
-      <div className="absolute bottom-4 left-4 z-20 flex flex-col items-center gap-1 md:hidden pointer-events-auto">
+      {/* Seamless Portal Transition Overlay between Exterior and Interior */}
+      {doorFade.active && (
+        <div
+          className="pointer-events-none absolute inset-0 z-30 flex flex-col items-center justify-center transition-opacity"
+          style={{
+            backgroundColor: `rgba(18, 18, 22, ${doorFade.opacity})`,
+          }}
+        >
+          {doorFade.opacity > 0.45 && (
+            <div className="flex flex-col items-center gap-2 select-none animate-fade-in">
+              <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-stone-200">
+                {doorFade.label}
+              </span>
+              <div className="w-6 h-px bg-stone-500/70" />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* On-screen Directional Touch Controls - Active only inside store */}
+      {currentStory !== 'exterior' && (
+        <div className="absolute bottom-4 left-4 z-20 flex flex-col items-center gap-1 md:hidden pointer-events-auto">
         <button
           onClick={() => moveStep('forward')}
           className="w-8 h-8 rounded-full bg-stone-900/90 border border-white/15 text-stone-300 active:bg-stone-800 flex items-center justify-center text-[10px]"
@@ -1877,6 +2190,7 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 };

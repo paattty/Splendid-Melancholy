@@ -3,10 +3,11 @@ import { ExhibitItem, NavigationMode } from '../types/gallery';
 import {
   X,
   Info,
-  Home,
+  DoorOpen,
   Layers,
   ChevronDown,
   Check,
+  Compass,
 } from 'lucide-react';
 
 interface EditorialOverlayProps {
@@ -18,8 +19,8 @@ interface EditorialOverlayProps {
   onOpenCounter: () => void;
   onAcquireAtCounter: (exhibit: ExhibitItem) => void;
   cartCount: number;
-  currentStory?: 1 | 2;
-  onTeleportToStory?: (story: 1 | 2) => void;
+  currentStory?: 1 | 2 | 'exterior';
+  onTeleportToStory?: (story: 1 | 2 | 'exterior') => void;
 }
 
 export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
@@ -95,7 +96,7 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
                   ? 'bg-stone-800 text-stone-100'
                   : 'text-stone-300 hover:text-white hover:bg-stone-800/60 font-medium'
               }`}
-              title="Levels: Select gallery floor"
+              title="Levels / Waypoints: Select floor or exterior"
               aria-expanded={showLevelsMenu}
               aria-haspopup="true"
             >
@@ -104,7 +105,7 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
                 Levels
               </span>
               <span className="text-[9px] font-mono text-stone-300 px-1 py-0.2 bg-stone-800/90 rounded-[2px] border border-stone-700/60 leading-none">
-                {currentStory === 1 ? '1' : '2'}
+                {currentStory === 2 ? '2' : '1'}
               </span>
               <ChevronDown
                 className={`w-3 h-3 text-stone-400 transition-transform duration-150 ${
@@ -225,30 +226,47 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
             <span className="tracking-wide text-stone-300">Turn / Look</span>
           </div>
 
-          <span className="text-stone-700 font-mono">/</span>
-
-          {/* Keyboard Walk guidance */}
-          <div className="flex items-center gap-1.5 text-stone-300">
-            <span className="flex items-center gap-0.5">
-              <kbd className="px-1 py-0.5 bg-stone-800/90 border border-stone-700/70 rounded-[2px] text-[9px] font-mono text-stone-200 leading-none">W</kbd>
-              <kbd className="px-1 py-0.5 bg-stone-800/90 border border-stone-700/70 rounded-[2px] text-[9px] font-mono text-stone-200 leading-none">A</kbd>
-              <kbd className="px-1 py-0.5 bg-stone-800/90 border border-stone-700/70 rounded-[2px] text-[9px] font-mono text-stone-200 leading-none">S</kbd>
-              <kbd className="px-1 py-0.5 bg-stone-800/90 border border-stone-700/70 rounded-[2px] text-[9px] font-mono text-stone-200 leading-none">D</kbd>
-            </span>
-            <span className="tracking-wide text-stone-400">Move</span>
-          </div>
+          {/* Keyboard Walk guidance (active only inside store) */}
+          {currentStory !== 'exterior' && (
+            <>
+              <span className="text-stone-700 font-mono">/</span>
+              <div className="flex items-center gap-1.5 text-stone-300">
+                <span className="flex items-center gap-0.5">
+                  <kbd className="px-1 py-0.5 bg-stone-800/90 border border-stone-700/70 rounded-[2px] text-[9px] font-mono text-stone-200 leading-none">W</kbd>
+                  <kbd className="px-1 py-0.5 bg-stone-800/90 border border-stone-700/70 rounded-[2px] text-[9px] font-mono text-stone-200 leading-none">A</kbd>
+                  <kbd className="px-1 py-0.5 bg-stone-800/90 border border-stone-700/70 rounded-[2px] text-[9px] font-mono text-stone-200 leading-none">S</kbd>
+                  <kbd className="px-1 py-0.5 bg-stone-800/90 border border-stone-700/70 rounded-[2px] text-[9px] font-mono text-stone-200 leading-none">D</kbd>
+                </span>
+                <span className="tracking-wide text-stone-400">Move</span>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Home overview button (bottom right) */}
+        {/* Dynamic toggle button: changes between Interior and Exterior based on current location */}
         <div className="pointer-events-auto ml-auto flex items-center bg-[#141418]/94 border border-stone-800/80 p-1 rounded-sm gap-0.5 shadow-xl">
           <button
-            onClick={onResetCamera}
+            onClick={() => {
+              if (currentStory === 'exterior') {
+                onTeleportToStory ? onTeleportToStory(1) : onResetCamera();
+              } else {
+                onTeleportToStory ? onTeleportToStory('exterior') : onResetCamera();
+              }
+            }}
             className="flex items-center gap-1.5 text-xs text-stone-300 hover:text-white py-1 px-2.5 transition-colors cursor-pointer rounded-sm hover:bg-stone-800/60 font-medium"
-            title="Home: Return to original overview position"
+            title={
+              currentStory === 'exterior'
+                ? 'Interior: Enter gallery interior'
+                : 'Exterior: View store exterior architecture'
+            }
           >
-            <Home className="w-3.5 h-3.5" />
+            {currentStory === 'exterior' ? (
+              <DoorOpen className="w-3.5 h-3.5 text-stone-300" />
+            ) : (
+              <Compass className="w-3.5 h-3.5 text-stone-300" />
+            )}
             <span className="text-[10px] font-mono uppercase tracking-wider">
-              Home
+              {currentStory === 'exterior' ? 'Interior' : 'Exterior'}
             </span>
           </button>
         </div>
