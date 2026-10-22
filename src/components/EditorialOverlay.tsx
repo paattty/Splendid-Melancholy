@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Check,
   Compass,
+  ArrowLeft,
 } from 'lucide-react';
 
 interface EditorialOverlayProps {
@@ -163,9 +164,24 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
         </div>
       </header>
 
-
-
-
+      {/* Minimal Back button when viewing glasses on a pedestal */}
+      {(selectedExhibit !== null || navigationMode === 'inspecting') && (
+        <div className="pointer-events-auto absolute top-14 sm:top-16 left-3.5 sm:left-5 md:left-6 z-30 animate-fade-in">
+          <button
+            onClick={() => {
+              onSelectExhibit(null);
+              onNavigationModeChange('free');
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-[#141418]/94 hover:bg-stone-800/80 border border-stone-800 hover:border-stone-700 rounded-sm text-stone-400 hover:text-stone-100 shadow-sm transition-colors cursor-pointer group"
+            title="Back to Gallery"
+          >
+            <ArrowLeft className="w-3 h-3 text-stone-400 group-hover:text-stone-200 group-hover:-translate-x-0.5 transition-transform" />
+            <span className="text-[10px] font-mono uppercase tracking-widest font-normal">
+              Back
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* Philosophy / Brand Modal */}
       {showInfoModal && (
