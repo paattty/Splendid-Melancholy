@@ -2104,28 +2104,6 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
     }
   }, [onNavigationModeChange, onSelectExhibit]);
 
-  // Reusable vectors for touch navigation impulses
-  const touchForwardVec = useRef(new THREE.Vector3());
-  const touchRightVec = useRef(new THREE.Vector3());
-
-  // On-screen walk navigation helper for mobile or direct click buttons
-  const moveStep = useCallback((direction: 'forward' | 'backward' | 'left' | 'right') => {
-    if (currentStoryRef.current === 'exterior') return;
-    isElevatedHome.current = false;
-    if (navModeRef.current !== 'free') {
-      onNavigationModeChange('free');
-      onSelectExhibit(null);
-    }
-    touchForwardVec.current.set(Math.sin(cameraYaw.current), 0, Math.cos(cameraYaw.current));
-    touchRightVec.current.set(-Math.cos(cameraYaw.current), 0, Math.sin(cameraYaw.current));
-    const impulse = 3.5;
-
-    if (direction === 'forward') cameraVelocity.current.addScaledVector(touchForwardVec.current, impulse);
-    if (direction === 'backward') cameraVelocity.current.addScaledVector(touchForwardVec.current, -impulse);
-    if (direction === 'left') cameraVelocity.current.addScaledVector(touchRightVec.current, -impulse);
-    if (direction === 'right') cameraVelocity.current.addScaledVector(touchRightVec.current, impulse);
-  }, [onNavigationModeChange, onSelectExhibit]);
-
   return (
     <div
       ref={containerRef}
@@ -2154,42 +2132,6 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
             </div>
           )}
         </div>
-      )}
-
-      {/* On-screen Directional Touch Controls - Active only inside store */}
-      {currentStory !== 'exterior' && (
-        <div className="absolute bottom-4 left-4 z-20 flex flex-col items-center gap-1 md:hidden pointer-events-auto">
-        <button
-          onClick={() => moveStep('forward')}
-          className="w-8 h-8 rounded-full bg-stone-900/90 border border-white/15 text-stone-300 active:bg-stone-800 flex items-center justify-center text-[10px]"
-          title="Move Forward"
-        >
-          ▲
-        </button>
-        <div className="flex gap-1">
-          <button
-            onClick={() => moveStep('left')}
-            className="w-8 h-8 rounded-full bg-stone-900/90 border border-white/15 text-stone-300 active:bg-stone-800 flex items-center justify-center text-[10px]"
-            title="Step Left"
-          >
-            ◀
-          </button>
-          <button
-            onClick={() => moveStep('backward')}
-            className="w-8 h-8 rounded-full bg-stone-900/90 border border-white/15 text-stone-300 active:bg-stone-800 flex items-center justify-center text-[10px]"
-            title="Step Back"
-          >
-            ▼
-          </button>
-          <button
-            onClick={() => moveStep('right')}
-            className="w-8 h-8 rounded-full bg-stone-900/90 border border-white/15 text-stone-300 active:bg-stone-800 flex items-center justify-center text-[10px]"
-            title="Step Right"
-          >
-            ▶
-          </button>
-        </div>
-      </div>
       )}
     </div>
   );
