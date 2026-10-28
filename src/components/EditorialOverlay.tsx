@@ -194,19 +194,16 @@ export const EditorialOverlay: React.FC<EditorialOverlayProps> = ({
               <X className="w-4 h-4" />
             </button>
             <div className="space-y-1">
-              <span className="text-[10px] uppercase tracking-widest text-stone-500 font-['Helvetica_Neue',Helvetica,Arial,sans-serif]">
-                Philosophy
+              <span className="text-[10px] uppercase tracking-[0.2em] text-stone-500 font-mono">
+                Seoul Flagship
               </span>
-              <h3 className="font-geographica text-3xl sm:text-4xl text-stone-100 leading-tight">
+              <h3 className="font-geographica text-2xl sm:text-3xl text-stone-100 leading-tight">
                 Splendid Melancholy
               </h3>
             </div>
             <p className="text-xs leading-relaxed text-stone-300 font-light">
-              Rooted in the quiet tension between Korean architectural minimalism and contemplative craft,
-              the collection rejects ephemeral ornamentation in pursuit of pure structural restraint.
-            </p>
-            <p className="text-xs leading-relaxed text-stone-400 font-light">
-              Move freely through the space, observe each silhouette from 360 degrees, and discover the interplay of light and form.
+              Splendid Melancholy is an independent optical design studio based in Seoul.
+              We build eyewear defined by structural clarity, balanced weight, and stripped-back silhouettes.
             </p>
             <div className="pt-3 border-t border-stone-800 flex justify-end">
               <button
