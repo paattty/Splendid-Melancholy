@@ -562,58 +562,89 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
       roughness: 0.16,
     });
 
-    // Outer portal frame casing lining the wall cutout
-    const portalLeftJamb = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.8, 1.05), steelPortalMat);
-    portalLeftJamb.position.set(-2.15, 1.9, 18.0);
+    // Outer portal frame casing lining the wall cutout (overlapping and flush at all corners)
+    const portalLeftJamb = new THREE.Mesh(new THREE.BoxGeometry(0.28, 3.86, 1.10), steelPortalMat);
+    portalLeftJamb.position.set(-2.14, 1.9, 18.0);
     interiorDoorGroup.add(portalLeftJamb);
 
-    const portalRightJamb = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.8, 1.05), steelPortalMat);
-    portalRightJamb.position.set(2.15, 1.9, 18.0);
+    const portalRightJamb = new THREE.Mesh(new THREE.BoxGeometry(0.28, 3.86, 1.10), steelPortalMat);
+    portalRightJamb.position.set(2.14, 1.9, 18.0);
     interiorDoorGroup.add(portalRightJamb);
 
-    const portalHeadReveal = new THREE.Mesh(new THREE.BoxGeometry(4.55, 0.25, 1.05), steelPortalMat);
-    portalHeadReveal.position.set(0, 3.75, 18.0);
+    // Head reveal extends to 4.56m to fully cap over both jambs and eliminate corner gaps
+    const portalHeadReveal = new THREE.Mesh(new THREE.BoxGeometry(4.56, 0.28, 1.10), steelPortalMat);
+    portalHeadReveal.position.set(0, 3.72, 18.0);
     interiorDoorGroup.add(portalHeadReveal);
 
-    const portalThreshold = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.03, 1.05), steelPortalMat);
-    portalThreshold.position.set(0, 0.015, 18.0);
+    const portalThreshold = new THREE.Mesh(new THREE.BoxGeometry(4.56, 0.05, 1.10), steelPortalMat);
+    portalThreshold.position.set(0, 0.025, 18.0);
     interiorDoorGroup.add(portalThreshold);
 
-    // Double glass doors with architectural reflections and translucency
+    // Double glass doors: Architectural charcoal tint with frosted satin diffusion
     const interiorDoorGlassMat = new THREE.MeshPhysicalMaterial({
-      color: 0x182433,
+      color: 0x14181f,       // Deep architectural charcoal-tinted glass
       transparent: true,
-      opacity: 0.68,
-      roughness: 0.06,
-      reflectivity: 0.88,
-      clearcoat: 1.0,
+      opacity: 0.85,         // Visibly tinted and frosted
+      roughness: 0.46,       // Silky satin frosted diffusion
+      metalness: 0.08,
+      reflectivity: 0.90,
+      clearcoat: 0.55,       // Subtle specular surface sheen
+      clearcoatRoughness: 0.28,
       side: THREE.DoubleSide,
     });
 
-    // Left and Right Glass Door Leaves
-    const doorLeafGeo = new THREE.PlaneGeometry(1.92, 2.7);
+    // Solid architectural portal backing panel - oversized to 4.65m x 4.0m to completely seal every corner and seam
+    const portalBackingGeo = new THREE.PlaneGeometry(4.65, 4.0);
+    const portalBackingMat = new THREE.MeshStandardMaterial({
+      color: 0x16171b,
+      roughness: 0.85,
+      metalness: 0.1,
+    });
+    const portalBacking = new THREE.Mesh(portalBackingGeo, portalBackingMat);
+    portalBacking.position.set(0, 1.9, 17.82);
+    interiorDoorGroup.add(portalBacking);
+
+    // Architectural Perimeter Door Frame Stiles & Rails (sealing all glass perimeter edges & corners)
+    const outerLeftStile = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.74, 0.08), brushedMetalMat);
+    outerLeftStile.position.set(-1.97, 1.38, 17.63);
+    interiorDoorGroup.add(outerLeftStile);
+
+    const outerRightStile = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.74, 0.08), brushedMetalMat);
+    outerRightStile.position.set(1.97, 1.38, 17.63);
+    interiorDoorGroup.add(outerRightStile);
+
+    const bottomDoorRail = new THREE.Mesh(new THREE.BoxGeometry(4.02, 0.06, 0.08), brushedMetalMat);
+    bottomDoorRail.position.set(0, 0.04, 17.63);
+    interiorDoorGroup.add(bottomDoorRail);
+
+    const topTransomRail = new THREE.Mesh(new THREE.BoxGeometry(4.02, 0.06, 0.08), brushedMetalMat);
+    topTransomRail.position.set(0, 3.56, 17.63);
+    interiorDoorGroup.add(topTransomRail);
+
+    // Left and Right Glass Door Leaves - width extended to 2.0m each so they embed flush inside frame
+    const doorLeafGeo = new THREE.PlaneGeometry(2.00, 2.72);
     const leftDoorGlass = new THREE.Mesh(doorLeafGeo, interiorDoorGlassMat);
-    leftDoorGlass.position.set(-0.98, 1.38, 17.62);
+    leftDoorGlass.position.set(-0.99, 1.38, 17.62);
     interiorDoorGroup.add(leftDoorGlass);
 
     const rightDoorGlass = new THREE.Mesh(doorLeafGeo, interiorDoorGlassMat);
-    rightDoorGlass.position.set(0.98, 1.38, 17.62);
+    rightDoorGlass.position.set(0.99, 1.38, 17.62);
     interiorDoorGroup.add(rightDoorGlass);
 
-    // Upper transom glass window above doors
-    const transomGeo = new THREE.PlaneGeometry(3.9, 0.72);
+    // Upper transom glass window - width 4.05m and height 0.82m extending fully to jambs and head reveal
+    const transomGeo = new THREE.PlaneGeometry(4.05, 0.82);
     const transomMesh = new THREE.Mesh(transomGeo, interiorDoorGlassMat);
     transomMesh.position.set(0, 3.16, 17.62);
     interiorDoorGroup.add(transomMesh);
 
-    // Transom dividing mullion bar
-    const mullionGeo = new THREE.BoxGeometry(4.0, 0.06, 0.07);
+    // Transom dividing horizontal mullion bar - width 4.15m to cleanly bridge into both jambs
+    const mullionGeo = new THREE.BoxGeometry(4.15, 0.07, 0.08);
     const mullionMesh = new THREE.Mesh(mullionGeo, brushedMetalMat);
-    mullionMesh.position.set(0, 2.76, 17.63);
+    mullionMesh.position.set(0, 2.74, 17.63);
     interiorDoorGroup.add(mullionMesh);
 
     // Center vertical dividing meeting stile between double doors
-    const centerMullionGeo = new THREE.BoxGeometry(0.06, 2.74, 0.07);
+    const centerMullionGeo = new THREE.BoxGeometry(0.08, 2.72, 0.08);
     const centerMullion = new THREE.Mesh(centerMullionGeo, brushedMetalMat);
     centerMullion.position.set(0, 1.38, 17.63);
     interiorDoorGroup.add(centerMullion);
@@ -627,16 +658,6 @@ export const GalleryCanvas: React.FC<GalleryCanvasProps> = ({
     const handleRight = new THREE.Mesh(doorHandleGeo, brushedMetalMat);
     handleRight.position.set(0.16, 1.38, 17.52);
     interiorDoorGroup.add(handleRight);
-
-    // Exterior outdoor daytime backdrop visible through the door glass
-    const outdoorBackdropGeo = new THREE.PlaneGeometry(8, 6);
-    const outdoorBackdropMat = new THREE.MeshBasicMaterial({
-      color: 0x98c6eb,
-      side: THREE.DoubleSide,
-    });
-    const outdoorBackdrop = new THREE.Mesh(outdoorBackdropGeo, outdoorBackdropMat);
-    outdoorBackdrop.position.set(0, 2.4, 20.2);
-    interiorDoorGroup.add(outdoorBackdrop);
 
     // Entrance mat in polished basalt on floor
     const matGeo = new THREE.BoxGeometry(4.2, 0.012, 2.0);

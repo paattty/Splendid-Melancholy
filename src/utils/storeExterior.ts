@@ -284,14 +284,16 @@ export function buildStoreExterior(scene: THREE.Scene): THREE.Group {
   portalThreshold.position.set(0, 0.015, 0);
   entranceGroup.add(portalThreshold);
 
-  // Double glass doors with architectural reflections and translucency
+  // Double glass doors with architectural charcoal tint and frosted satin diffusion
   const doorGlassMat = new THREE.MeshPhysicalMaterial({
-    color: 0x182433,
+    color: 0x14181f,       // Deep architectural charcoal-tinted glass
     transparent: true,
-    opacity: 0.68,
-    roughness: 0.06,
-    reflectivity: 0.88,
-    clearcoat: 1.0,
+    opacity: 0.78,         // Visibly tinted and frosted
+    roughness: 0.44,       // Silky satin frosted diffusion
+    metalness: 0.08,
+    reflectivity: 0.90,
+    clearcoat: 0.55,
+    clearcoatRoughness: 0.28,
     side: THREE.DoubleSide,
   });
 
